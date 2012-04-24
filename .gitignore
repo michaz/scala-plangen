@@ -53,7 +53,5 @@ project/plugins/project
 
 # Pax Runner (for easy OSGi launching)
 runner
-sbt
-sbt-launcher.jar
 bin
 .cache
