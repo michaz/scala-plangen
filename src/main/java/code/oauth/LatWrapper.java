@@ -28,6 +28,9 @@ public class LatWrapper {
         return latitude.location.list().setGranularity("best").execute().getItems();
     }
 
+    public List<Location> getLatitude(Long mintime) throws IOException {
+        return latitude.location.list().setMinTime(mintime.toString()).setMaxTime( Long.toString(mintime + 24*60*60*1000) ).setGranularity("best").execute().getItems();
+    }
 
 
 }

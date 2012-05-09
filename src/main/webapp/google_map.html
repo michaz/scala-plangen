@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta content="text/html; charset=UTF-8" http-equiv="content-type" />
+    <title>Home</title>
+
+  </head>
+  <body class="lift:content_id=main" onunload="GUnload()">
+    <div id="main" class="lift:surround?with=default;at=content">
+		<script src="http://maps.googleapis.com/maps/api/js?v=3.4&sensor=false&language=en" type="text/javascript"></script>
+		<script type="text/javascript">
+
+		function drawmap(locations) {
+		    var myOptions = {
+		           zoom: 12,
+		           mapTypeId: google.maps.MapTypeId.ROADMAP
+		    };
+		    var map = new google.maps.Map(document.getElementById("map_canvas"), myOptions);
+		    initialLocation = new google.maps.LatLng(locations.loc[0].lat, locations.loc[0].lng);
+		    map.setCenter(initialLocation);
+		    for(i=0; i<locations.loc.length; i++) {
+		       var point = new google.maps.LatLng(locations.loc[i].lat,locations.loc[i].lng);
+
+		       var marker = new google.maps.Marker({
+		                                    position: point,
+		                                    title: locations.loc[i].title });
+		       marker.setMap(map);
+		    }      
+		}
+
+		</script>	
+      <fieldset>
+	    <legend>&nbsp;&nbsp;Cronus&nbsp;&nbsp;-&nbsp;&nbsp;Scala Lift Example Using Google Maps API&nbsp;&nbsp;</legend>
+	      <p valign="center" align="center">
+		<span class="lift:HelloWorld.googleMap">
+			<div id="map_canvas" style="width: 700px; height: 400px"></div>	
+			</br>
+			<b>Source Code</b> <a href="https://github.com/joestein/cronus/">https://github.com/joestein/cronus</a>			
+		</span>
+	      </p>
+	  </fieldset>    
+	</div>
+  </body>
+</html>
+
