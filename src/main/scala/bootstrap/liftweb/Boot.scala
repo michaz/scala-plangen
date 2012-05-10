@@ -8,7 +8,8 @@ import common._
 import http._
 import sitemap._
 import Loc._
-
+   import com.mongodb.Mongo
+import net.liftweb.mongodb.{DefaultMongoIdentifier, MongoDB}
 
 /**
  * A class that's instantiated early and run.  It allows the application
@@ -16,6 +17,11 @@ import Loc._
  */
 class Boot {
   def boot {
+    
+
+
+    MongoDB.defineDb(DefaultMongoIdentifier, new Mongo, "test")
+    
     // where to search snippet
     LiftRules.addToPackages("code")
 
@@ -26,6 +32,7 @@ class Boot {
       Menu.i("List Locations") / "list_locations",
       Menu.i("Pick date") / "datepicker",
       Menu.i("Map") / "google_map",
+      Menu.i("Days") / "list_days",
 
       // more complex because this menu allows anything in the
       // /static path to be visible

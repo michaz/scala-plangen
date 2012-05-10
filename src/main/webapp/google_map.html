@@ -1,13 +1,15 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta content="text/html; charset=UTF-8" http-equiv="content-type" />
-    <title>Home</title>
+<head>
+<meta content="text/html; charset=UTF-8" http-equiv="content-type" />
+<title>Home</title>
 
-  </head>
-  <body class="lift:content_id=main" onunload="GUnload()">
-    <div id="main" class="lift:surround?with=default;at=content">
-		<script src="http://maps.googleapis.com/maps/api/js?v=3.4&sensor=false&language=en" type="text/javascript"></script>
+</head>
+<body class="lift:content_id=main" onunload="GUnload()">
+	<div id="main" class="lift:surround?with=default;at=content">
+		<script
+			src="http://maps.googleapis.com/maps/api/js?v=3.4&sensor=false&language=en"
+			type="text/javascript"></script>
 		<script type="text/javascript">
 
 		function drawmap(locations) {
@@ -28,18 +30,23 @@
 		    }      
 		}
 
-		</script>	
-      <fieldset>
-	    <legend>&nbsp;&nbsp;Cronus&nbsp;&nbsp;-&nbsp;&nbsp;Scala Lift Example Using Google Maps API&nbsp;&nbsp;</legend>
-	      <p valign="center" align="center">
-		<span class="lift:HelloWorld.googleMap">
-			<div id="map_canvas" style="width: 700px; height: 400px"></div>	
-			</br>
-			<b>Source Code</b> <a href="https://github.com/joestein/cronus/">https://github.com/joestein/cronus</a>			
-		</span>
-	      </p>
-	  </fieldset>    
+		</script>
+		<fieldset>
+			<legend>&nbsp;&nbsp;Cronus&nbsp;&nbsp;-&nbsp;&nbsp;Scala
+				Lift Example Using Google Maps API&nbsp;&nbsp;</legend>
+			<p valign="center" align="center">
+				<span class="lift:GoogleMap">
+					<div id="map_canvas" style="width: 700px; height: 400px"></div> </br> <b>Source
+						Code</b> <a href="https://github.com/joestein/cronus/">https://github.com/joestein/cronus</a>
+					<div>
+						<form class="lift:form.ajax">
+							<input class="lift:Submit" id="submit" /> <input type="submit" value="Save this day" />
+						</form>
+					</div>
+				</span>
+			</p>
+		</fieldset>
 	</div>
-  </body>
+</body>
 </html>
 

@@ -15,6 +15,7 @@ import net.liftweb.http.SHtml
 import net.liftweb.util.Helpers
 import net.liftweb.http.SessionVar
 import net.liftweb.common.Empty
+import java.util.Date
 
 /**
  * A snippet transforms input to output... it transforms
@@ -27,7 +28,7 @@ import net.liftweb.common.Empty
  * no explicit state managed in the snippet.
  */
 
-object SelectedDate extends SessionVar[Box[Long]](Empty)
+object SelectedDate extends SessionVar[Long]((new Date()).getTime())
 
 object DatePicker extends LiftScreen {
 
@@ -36,7 +37,7 @@ object DatePicker extends LiftScreen {
 		type ValueType = Long
 		override def name = "Start Date " 
 		override implicit def manifest = buildIt[Long] 
-		override def default = 47l 
+		override def default = SelectedDate.get
 		override def toForm: Box[NodeSeq] = {
 			import net.liftweb.util._
 
@@ -64,7 +65,7 @@ object DatePicker extends LiftScreen {
 	
 	def finish() {
 		S.notice("Date: "+date)
-		SelectedDate.set(Full(date))
+		SelectedDate.set(date)
 	}
 
 }
