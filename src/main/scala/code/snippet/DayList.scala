@@ -6,6 +6,8 @@ import Helpers._
 import code.oauth.LatWrapper
 import net.liftweb.common.Logger
 import data.mongo.Location
+import java.text.SimpleDateFormat
+import net.liftweb.http.SHtml
 
 /**
  * A snippet transforms input to output... it transforms
@@ -19,8 +21,14 @@ import data.mongo.Location
  */
 object DayList extends Logger {
 
+  private[this] def theDateFormat = new SimpleDateFormat("yyyy-MM-dd")
+
   def render = "li *" #> {
-    Location.findDays.map(_.toString)
+    Location.findDays.map(date => {
+      val dateString = theDateFormat.format(date)
+      "a [href]" #> (dateString + "/map") & "a *" #> dateString
+    })
+
   }
 
 }

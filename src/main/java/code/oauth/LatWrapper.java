@@ -7,6 +7,7 @@ import com.google.api.services.latitude.Latitude;
 import com.google.api.services.latitude.model.Location;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -29,7 +30,13 @@ public class LatWrapper {
     }
 
     public List<Location> getLatitude(Long mintime) throws IOException {
-        return latitude.location.list().setMinTime(mintime.toString()).setMaxTime( Long.toString(mintime + 24*60*60*1000) ).setGranularity("best").execute().getItems();
+
+        List<Location> locations = latitude.location.list().setMinTime(mintime.toString()).setMaxTime(Long.toString(mintime + 24 * 60 * 60 * 1000)).setGranularity("best").execute().getItems();
+        if (locations != null) {
+            return locations;
+        } else {
+            return Collections.emptyList();
+        }
     }
 
 

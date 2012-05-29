@@ -1,43 +1,36 @@
 package code.snippet
 
 import scala.collection.JavaConversions._
-import scala.xml.{NodeSeq, Text}
 import net.liftweb.util._
 import net.liftweb.common._
 import net.liftweb.http._
-import java.util.Date
 import Helpers._
 import js.JE.{JsObj, JsRaw, JsArray}
 import js.JsCmds._
 import js.JsCmds.JsCrVar
-import _root_.scala.xml.{NodeSeq, Text}
 import code.oauth.LatWrapper
-import js.{JsCmds, JsObj, JE, JsCmd}
+import js.{JsCmds, JsObj, JsCmd}
+import data.mongo.Location
+import java.util.Date
 import java.text.SimpleDateFormat
-import org.bson.types.ObjectId
-import data.mongo.{LatLong, Location}
+import com.google.api.client.util.DateTime
+import xml.{Text, NodeSeq}
 
-
-class GoogleMap extends Logger {
-
-  var date = new Date()
+class GoogleDatabaseMap extends Logger {
 
   private[this] def theDateFormat = new SimpleDateFormat("yyyy-MM-dd")
 
-  var locations: Seq[Location] = Nil
+  var date = new Date
+
+  var locations: List[Location] = Nil
 
   def render = {
     println(S.param("date"))
     S.param("date") match {
       case Full(dateParam) => date = theDateFormat.parse(dateParam)
-      case _ => date = new Date
+      case _ => ()
     }
-    warn("Entering map rendering.")
-    val latitude = new LatWrapper(LatitudeResource.is.openTheBox)
-    locations = latitude.getLatitude(date.getTime).map(jsonLoc => Location(
-      ObjectId.get,
-      LatLong(jsonLoc.getLatitude().asInstanceOf[java.math.BigDecimal].doubleValue(), jsonLoc.getLongitude().asInstanceOf[java.math.BigDecimal].doubleValue()),
-      new Date(jsonLoc.getTimestampMs().asInstanceOf[String].toLong)))
+    locations = Location.findByDay(date)
     renderGoogleMap()
   }
 
@@ -57,7 +50,7 @@ class GoogleMap extends Logger {
   // render the google map
   def renderGoogleMap(): NodeSeq = {
 
-
+    warn("Entering map rendering.")
 
     // setup some locations to display on the map
     // val jsLocations: List[JsObj] = List(makeLocation("loc1","40.744715", "-74.0046"),makeLocation("loc2","40.75684", "-73.9966"))
@@ -73,13 +66,18 @@ class GoogleMap extends Logger {
   }
 
   def renderButton = {
-      "#gestern [href]" #> ("/google_map/" + theDateFormat.format(new Date(date.getTime - 24 *60*60*1000))) &
-      "#morgen [href]" #> ("/google_map/" + theDateFormat.format(new Date(date.getTime + 24 *60*60*1000))) &
-      "#date" #> SHtml.text(theDateFormat.format(date), content => JsCmds.RedirectTo("/google_map/" + content)) &
-      "#submit [onClick]" #> SHtml.ajaxInvoke(()=>{
-        val latitude = new LatWrapper(LatitudeResource.is.openTheBox)
-        locations.foreach(_.save)
-       })
+    "#gestern [href]" #> ("/locations/day/" + theDateFormat.format(new Date(date.getTime - 24 *60*60*1000)) + "/map") &
+    "#morgen [href]" #> ("/locations/day/" + theDateFormat.format(new Date(date.getTime + 24 *60*60*1000)) + "/map") &
+    "#date" #> SHtml.text(theDateFormat.format(date), content => JsCmds.RedirectTo("/locations/day/" + content + "/map")) &
+    "#delete_all [onClick]" #> SHtml.ajaxInvoke(()=>{
+      Location.findAll.foreach(_.delete)
+      JsCmds.Alert("Done")
+    }) &
+    "#delete_day [onClick]" #> SHtml.ajaxInvoke(() => {
+      Location.findByDay(date).foreach(_.delete)
+      List(JsCmds.Alert("Done"), JsCmds.RedirectTo("/locations/day/"))
+    })
   }
-}
 
+
+}

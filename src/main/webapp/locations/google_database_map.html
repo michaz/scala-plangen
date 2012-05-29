@@ -32,20 +32,19 @@
 
 		</script>
 		<fieldset>
-			<legend>&nbsp;&nbsp;Cronus&nbsp;&nbsp;-&nbsp;&nbsp;Scala
-				Lift Example Using Google Maps API&nbsp;&nbsp;</legend>
+			<legend>Locations in database</legend>
 			<p valign="center" align="center">
-				<span class="lift:GoogleMap">
-					<div id="map_canvas" style="width: 700px; height: 400px"></div> </br> <b>Source
-						Code</b> <a href="https://github.com/joestein/cronus/">https://github.com/joestein/cronus</a>
-                    <div class="lift:GoogleMap.renderButton">
+				<span class="lift:GoogleDatabaseMap">
+					<div id="map_canvas" style="width: 700px; height: 400px"></div>
+                    <div class="lift:GoogleDatabaseMap.renderButton">
                         <a id="gestern">Gestern</a>
                         <a id="morgen">Morgen</a>
                         <form class="lift:form.ajax">
                             <input id="date" name="date" />
                             <input type="submit" value="Go to date" />
                         </form>
-                        <button id="submit">Diesen Tag speichern</button>
+                        <button id="delete_day">Diesen Tag löschen</button>
+                        <button id="delete_all">Alles löschen</button>
                     </div>
 				</span>
 			</p>

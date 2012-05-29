@@ -1,4 +1,5 @@
 package code.snippet
+
 import scala.collection.JavaConversions._
 import _root_.net.liftweb.util._
 import Helpers._
@@ -8,6 +9,10 @@ import net.liftweb.common.Logger
 import data.mongo.Location
 import org.bson.types.ObjectId
 import data.mongo.LatLong
+import xml.Text
+import java.util.Date
+import net.liftweb.http.S
+import java.text.SimpleDateFormat
 
 /**
  * A snippet transforms input to output... it transforms
@@ -21,12 +26,19 @@ import data.mongo.LatLong
  */
 object LatitudeList extends Logger {
 
-  def render = "li *" #> {
-    warn("I'm in the snippet")
-    val latitude = new LatWrapper(LatitudeResource.is.openTheBox)
-    val locations = latitude.getLatitude(SelectedDate.get)
+  private[this] def theDateFormat = new SimpleDateFormat("yyyy-MM-dd")
 
-    (locations sortBy ( _.getTimestampMs().asInstanceOf[String] )) .map(_.toString)
+  def render = S.param("date") match {
+    case Full(dateParam) => {
+      val date = theDateFormat.parse(dateParam)
+      "li *" #> {
+        warn("I'm in the snippet")
+        val locations = Location.findByDay(date)
+        (locations sortBy (_.timestamp.getTime)).map(_.toString)
+      } &
+        "#from_date *" #> Text(date.toString) &
+        "#to_date *" #> Text(new Date(date.getTime + 24 * 60 * 60 * 1000).toString)
+    }
+    case _ => "li *" #> "No date."
   }
-
 }

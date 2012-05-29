@@ -3,6 +3,7 @@ import org.bson.types.ObjectId
 import java.util.Date
 import net.liftweb.mongodb._
 import com.mongodb._
+import net.liftweb.mongodb.BsonDSL._
 
 import scala.collection.JavaConversions._
 
@@ -25,6 +26,15 @@ object Location extends MongoDocumentMeta[Location] {
     val days = retval.map(doc => doc.asInstanceOf[BasicDBObject].get("day"))
     days
   })
+
+  def findByDay(timestamp: Date) = {
+    println(timestamp)
+    val tonight = new Date(timestamp.getTime + 60 * 60 * 24 * 1000)
+    println(tonight)
+    val results = Location.findAll(("timestamp" -> ("$gte" -> timestamp) ~ ("$lt" -> tonight)))
+    results.foreach(println(_))
+    results
+  }
 
 }
 
