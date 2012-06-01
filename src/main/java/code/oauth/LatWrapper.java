@@ -1,6 +1,6 @@
 package code.oauth;
 
-import com.google.api.client.googleapis.auth.oauth2.draft10.GoogleAccessProtectedResource;
+import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.jackson.JacksonFactory;
 import com.google.api.services.latitude.Latitude;
@@ -21,17 +21,17 @@ public class LatWrapper {
 
     private Latitude latitude;
 
-    public LatWrapper(GoogleAccessProtectedResource s) {
-        latitude = new Latitude(new NetHttpTransport(), s, new JacksonFactory());
+    public LatWrapper(Credential s) {
+        latitude = Latitude.builder(new NetHttpTransport(), new JacksonFactory()).setHttpRequestInitializer(s).build();
     }
 
     public List<Location> getLatitude() throws IOException {
-        return latitude.location.list().setGranularity("best").execute().getItems();
+        return latitude.location().list().setGranularity("best").execute().getItems();
     }
 
     public List<Location> getLatitude(Long mintime) throws IOException {
 
-        List<Location> locations = latitude.location.list().setMinTime(mintime.toString()).setMaxTime(Long.toString(mintime + 24 * 60 * 60 * 1000)).setGranularity("best").execute().getItems();
+        List<Location> locations = latitude.location().list().setMinTime(mintime.toString()).setMaxTime(Long.toString(mintime + 24 * 60 * 60 * 1000)).setGranularity("best").execute().getItems();
         if (locations != null) {
             return locations;
         } else {

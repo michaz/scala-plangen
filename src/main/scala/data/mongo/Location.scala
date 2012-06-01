@@ -6,6 +6,7 @@ import com.mongodb._
 import net.liftweb.mongodb.BsonDSL._
 
 import scala.collection.JavaConversions._
+import service.User
 
 case class LatLong(lat: Double, long: Double)
 
@@ -14,8 +15,12 @@ object Location extends MongoDocumentMeta[Location] {
   override def formats = super.formats + new ObjectIdSerializer + new DateSerializer
 
   def findDays = MongoDB.use( f = db => {
+    val userId = User.currentUserId
     val params = new BasicDBObject()
     params.put("ns", "locations")
+    val cond = new BasicDBObject()
+    cond.put("user_id", userId)
+    params.put("cond", cond)
     params.put("$reduce", "function(obj,prev) {  }")
     params.put("initial", new BasicDBObject())
     params.put("$keyf", "function(loc) { d = ISODate(\"1970-01-01\"); d.setFullYear(loc.timestamp.getFullYear()); d.setMonth(loc.timestamp.getMonth()); d.setDate(loc.timestamp.getDate()); return {\"day\": d } } ")
@@ -29,15 +34,16 @@ object Location extends MongoDocumentMeta[Location] {
 
   def findByDay(timestamp: Date) = {
     println(timestamp)
+    val userId = User.currentUserId
     val tonight = new Date(timestamp.getTime + 60 * 60 * 24 * 1000)
     println(tonight)
-    val results = Location.findAll(("timestamp" -> ("$gte" -> timestamp) ~ ("$lt" -> tonight)))
+    val results = Location.findAll( ("timestamp" -> ("$gte" -> timestamp) ~ ("$lt" -> tonight)) ~ ("user_id" -> userId) )
     results.foreach(println(_))
     results
   }
 
 }
 
-case class Location(_id: ObjectId, location: LatLong, timestamp: Date) extends MongoDocument[Location] {
+case class Location(_id: ObjectId, user_id: String, location: LatLong, timestamp: Date) extends MongoDocument[Location] {
   def meta = Location
 }

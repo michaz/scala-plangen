@@ -40,11 +40,5 @@ public class OAuth2ClientCredentials {
   /** Value of the "Client secret" shown under "Client ID for installed applications". */
   public static final String CLIENT_SECRET = "JsO2PpoY0CjOxzJtHeidWKYW";
 
-  public static void errorIfNotSpecified() {
-    if (CLIENT_ID == null || CLIENT_SECRET == null) {
-      System.err.println(
-          "Please enter your client ID and secret in " + OAuth2ClientCredentials.class);
-      System.exit(1);
-    }
-  }
+
 }

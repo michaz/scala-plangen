@@ -15,6 +15,7 @@ import java.util.Date
 import java.text.SimpleDateFormat
 import com.google.api.client.util.DateTime
 import xml.{Text, NodeSeq}
+import service.User
 
 class GoogleDatabaseMap extends Logger {
 
@@ -70,7 +71,7 @@ class GoogleDatabaseMap extends Logger {
     "#morgen [href]" #> ("/locations/day/" + theDateFormat.format(new Date(date.getTime + 24 *60*60*1000)) + "/map") &
     "#date" #> SHtml.text(theDateFormat.format(date), content => JsCmds.RedirectTo("/locations/day/" + content + "/map")) &
     "#delete_all [onClick]" #> SHtml.ajaxInvoke(()=>{
-      Location.findAll.foreach(_.delete)
+      User.findAllLocations.foreach(_.delete)
       JsCmds.Alert("Done")
     }) &
     "#delete_day [onClick]" #> SHtml.ajaxInvoke(() => {

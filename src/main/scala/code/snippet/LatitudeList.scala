@@ -32,7 +32,6 @@ object LatitudeList extends Logger {
     case Full(dateParam) => {
       val date = theDateFormat.parse(dateParam)
       "li *" #> {
-        warn("I'm in the snippet")
         val locations = Location.findByDay(date)
         (locations sortBy (_.timestamp.getTime)).map(_.toString)
       } &
