@@ -16,6 +16,7 @@ import java.text.SimpleDateFormat
 import org.bson.types.ObjectId
 import data.mongo.{LatLong, Location}
 import service.User
+import bootstrap.liftweb.LatitudeResource
 
 
 class GoogleMap extends Logger {

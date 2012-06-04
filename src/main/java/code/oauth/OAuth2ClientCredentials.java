@@ -32,13 +32,13 @@ package code.oauth;
  *
  * @author Yaniv Inbar
  */
-public class OAuth2ClientCredentials {
+//public class OAuth2ClientCredentials {
 
   /** Value of the "Client ID" shown under "Client ID for installed applications". */
-  public static final String CLIENT_ID = "608965655114.apps.googleusercontent.com";
+//   public static final String CLIENT_ID = "608965655114.apps.googleusercontent.com";
 
   /** Value of the "Client secret" shown under "Client ID for installed applications". */
-  public static final String CLIENT_SECRET = "JsO2PpoY0CjOxzJtHeidWKYW";
+//   public static final String CLIENT_SECRET = "JsO2PpoY0CjOxzJtHeidWKYW";
 
 
-}
+//}

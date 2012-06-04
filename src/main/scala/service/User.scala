@@ -3,9 +3,9 @@ package service
 import com.google.api.services.oauth2.Oauth2
 import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.jackson.JacksonFactory
-import code.snippet.LatitudeResource
 import data.mongo.Location
 import net.liftweb.mongodb.BsonDSL._
+import bootstrap.liftweb.LatitudeResource
 
 /**
  * Created with IntelliJ IDEA.
