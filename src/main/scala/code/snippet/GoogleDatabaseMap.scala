@@ -1,6 +1,5 @@
 package code.snippet
 
-import scala.collection.JavaConversions._
 import net.liftweb.util._
 import net.liftweb.common._
 import net.liftweb.http._
@@ -8,13 +7,11 @@ import Helpers._
 import js.JE.{JsObj, JsRaw, JsArray}
 import js.JsCmds._
 import js.JsCmds.JsCrVar
-import code.oauth.LatWrapper
 import js.{JsCmds, JsObj, JsCmd}
 import data.mongo.Location
 import java.util.Date
 import java.text.SimpleDateFormat
-import com.google.api.client.util.DateTime
-import xml.{Text, NodeSeq}
+import xml.NodeSeq
 import service.User
 
 class GoogleDatabaseMap extends Logger {

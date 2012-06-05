@@ -7,10 +7,11 @@ import net.liftweb.mongodb.BsonDSL._
 
 import scala.collection.JavaConversions._
 import service.User
+import net.liftweb.common.Logger
 
 case class LatLong(lat: Double, long: Double)
 
-object Location extends MongoDocumentMeta[Location] {
+object Location extends MongoDocumentMeta[Location] with Logger {
   override def collectionName = "locations"
   override def formats = super.formats + new ObjectIdSerializer + new DateSerializer
 
@@ -33,12 +34,11 @@ object Location extends MongoDocumentMeta[Location] {
   })
 
   def findByDay(timestamp: Date) = {
-    println(timestamp)
-    val userId = User.currentUserId
     val tonight = new Date(timestamp.getTime + 60 * 60 * 24 * 1000)
-    println(tonight)
+    trace("Fetching locations from %s to %s from database.".format(timestamp, tonight))
+    val userId = User.currentUserId
     val results = Location.findAll( ("timestamp" -> ("$gte" -> timestamp) ~ ("$lt" -> tonight)) ~ ("user_id" -> userId) )
-    results.foreach(println(_))
+    results.foreach(trace(_))
     results
   }
 

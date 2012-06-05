@@ -1,6 +1,5 @@
 package code.snippet
 
-import scala.collection.JavaConversions._
 import net.liftweb.util._
 import net.liftweb.common._
 import net.liftweb.http._
@@ -10,13 +9,11 @@ import js.JE.{JsObj, JsRaw, JsArray}
 import js.JsCmds._
 import js.JsCmds.JsCrVar
 import _root_.scala.xml.NodeSeq
-import code.oauth.LatWrapper
 import js.{JsCmds, JsObj, JsCmd}
 import java.text.SimpleDateFormat
 import org.bson.types.ObjectId
 import data.mongo.{LatLong, Location}
-import service.User
-import bootstrap.liftweb.LatitudeResource
+import service.{Latitude, User}
 
 
 class GoogleMap extends Logger {
@@ -33,9 +30,8 @@ class GoogleMap extends Logger {
       case _ => date = new Date
     }
     warn("Entering map rendering.")
-    val latitude = new LatWrapper(LatitudeResource.is.openTheBox)
     val userId = User.currentUserId
-    locations = latitude.getLatitude(date.getTime).map(jsonLoc => Location(
+    locations = Latitude.getLatitude(date.getTime).map(jsonLoc => Location(
       ObjectId.get,
       userId,
       LatLong(jsonLoc.getLatitude().asInstanceOf[java.math.BigDecimal].doubleValue(), jsonLoc.getLongitude().asInstanceOf[java.math.BigDecimal].doubleValue()),

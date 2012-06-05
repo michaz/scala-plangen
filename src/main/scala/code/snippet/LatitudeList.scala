@@ -1,14 +1,10 @@
 package code.snippet
 
-import scala.collection.JavaConversions._
 import _root_.net.liftweb.util._
 import Helpers._
-import code.oauth.LatWrapper
 import net.liftweb.common.Full
 import net.liftweb.common.Logger
 import data.mongo.Location
-import org.bson.types.ObjectId
-import data.mongo.LatLong
 import xml.Text
 import java.util.Date
 import net.liftweb.http.S
