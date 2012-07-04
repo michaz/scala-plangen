@@ -121,9 +121,11 @@ class Boot {
       Menu(callback),
       Menu(Loc("Import from Latitude", "google_map" :: "today" :: Nil, "Import from Latitude", loggedInToLatitude, EarlyResponse(() => Full(RedirectResponse("/google_map/" + theDateFormat.format(new Date)))))),
       Menu(Loc("Browse Latitude", "google_map" :: Nil, "Browse Latitude", loggedInToLatitude, Hidden)),
+
       Menu(Loc("Log-in to Latitude", ExtLink(url), "Log-in to Latitude", notLoggedInToLatitude)),
       Menu.i("Browse database") / "locations" / "day" / "index" >> loggedInToLatitude,
       Menu.i("List") / "locations" / "list_locations" >> loggedInToLatitude >> Hidden,
+      Menu.i("Upload GPX file") / "upload_trace",
       Menu.i("Map in database") / "locations" / "google_database_map" >> loggedInToLatitude >> Hidden,
       Menu.i("Logout") / "logout" >> loggedInToLatitude >> EarlyResponse(() => {
         LatitudeResource.remove()
