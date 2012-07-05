@@ -125,7 +125,7 @@ class Boot {
       Menu(Loc("Log-in to Latitude", ExtLink(url), "Log-in to Latitude", notLoggedInToLatitude)),
       Menu.i("Browse database") / "locations" / "day" / "index" >> loggedInToLatitude,
       Menu.i("List") / "locations" / "list_locations" >> loggedInToLatitude >> Hidden,
-      Menu.i("Upload GPX file") / "upload_trace",
+      Menu.i("Upload KML file") / "upload_trace" >> loggedInToLatitude,
       Menu.i("Map in database") / "locations" / "google_database_map" >> loggedInToLatitude >> Hidden,
       Menu.i("Logout") / "logout" >> loggedInToLatitude >> EarlyResponse(() => {
         LatitudeResource.remove()
