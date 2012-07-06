@@ -37,7 +37,7 @@ object Upload extends Logger {
       days.foreach(day => Location.findByDay(day.toDateMidnight.toDate).foreach(loc => loc.delete))
       readings.foreach {reading =>
         val coords = reading.coord.split(" ").map{java.lang.Double.parseDouble(_)}
-        Location(ObjectId.get, user, LatLong( coords(0), coords(1) ), reading.when.toDate).save
+        Location(ObjectId.get, user, LatLong( coords(1), coords(0) ), reading.when.toDate).save
         nDays = nDays + 1
       }
     })
