@@ -51,6 +51,11 @@ object ShowPlan extends Logger {
 
   def render = {
     println(S.param("date"))
+
+    def renderSegments(segments: scala.List[List[Location]]): List[CssSel] = {
+      segments.map(segment => "#locationList *" #> segment.map(location => "#locationText *" #> Text(location.toString)))
+    }
+
     S.param("date") match {
       case Full(dateParam) => {
         val date = theDateFormat.parse(dateParam)
@@ -60,10 +65,10 @@ object ShowPlan extends Logger {
         "#plan *" #> Text(actsAndLegs.toString) &
         "#planList *" #> actsAndLegs.map { planElement =>
           "#planElementText *" #> planElement.toString &
-          "#locations *" #> (planElement match {
-            case Activity(segment) => segment.map(loc => "#locationText *" #> Text(loc.toString))
-            case Leg(act1, leg, act2) => leg.flatten.map(loc => "#locationText *" #> Text(loc.toString))
-            case Other(other) => other.flatten.map(loc => "#locationText *" #> Text(loc.toString))
+          "#segmentList *" #> (planElement match {
+            case Activity(segment) => renderSegments(segment :: Nil)
+            case Leg(act1, leg, act2) => renderSegments(leg)
+            case Other(other) => renderSegments(other)
             case _ => Nil
             })
           }
