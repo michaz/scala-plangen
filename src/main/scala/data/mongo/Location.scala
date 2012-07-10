@@ -37,7 +37,9 @@ object Location extends MongoDocumentMeta[Location] with Logger {
     val tonight = new Date(timestamp.getTime + 60 * 60 * 24 * 1000)
     trace("Fetching locations from %s to %s from database.".format(timestamp, tonight))
     val userId = User.currentUserId
-    val results = Location.findAll( ("timestamp" -> ("$gte" -> timestamp) ~ ("$lt" -> tonight)) ~ ("user_id" -> userId) )
+    val results = Location
+      .findAll( ("timestamp" -> ("$gte" -> timestamp) ~ ("$lt" -> tonight)) ~ ("user_id" -> userId) )
+      .sortBy(_.timestamp.getTime)
     results.foreach(trace(_))
     results
   }

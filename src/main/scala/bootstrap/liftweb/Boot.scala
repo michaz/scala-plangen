@@ -103,7 +103,7 @@ class Boot {
       Arrays.asList(LatitudeScopes.LATITUDE_ALL_BEST, "https://www.googleapis.com/auth/userinfo.profile")
     ).build()
 
-    val loggedInToLatitude = If(() => LatitudeResource.is.isDefined,
+    val loggedIn = If(() => LatitudeResource.is.isDefined,
       () => RedirectResponse(url))
 
     val notLoggedInToLatitude = If(() => LatitudeResource.is.isEmpty,
@@ -119,15 +119,16 @@ class Boot {
     val sitemap = SiteMap(
       Menu.i("Home") / "index", // the simple way to declare a menu
       Menu(callback),
-      Menu(Loc("Import from Latitude", "google_map" :: "today" :: Nil, "Import from Latitude", loggedInToLatitude, EarlyResponse(() => Full(RedirectResponse("/google_map/" + theDateFormat.format(new Date)))))),
-      Menu(Loc("Browse Latitude", "google_map" :: Nil, "Browse Latitude", loggedInToLatitude, Hidden)),
+      Menu(Loc("Import from Latitude", "google_map" :: "today" :: Nil, "Import from Latitude", loggedIn, EarlyResponse(() => Full(RedirectResponse("/google_map/" + theDateFormat.format(new Date)))))),
+      Menu(Loc("Browse Latitude", "google_map" :: Nil, "Browse Latitude", loggedIn, Hidden)),
 
       Menu(Loc("Log-in to Latitude", ExtLink(url), "Log-in to Latitude", notLoggedInToLatitude)),
-      Menu.i("Browse database") / "locations" / "day" / "index" >> loggedInToLatitude,
-      Menu.i("List") / "locations" / "list_locations" >> loggedInToLatitude >> Hidden,
-      Menu.i("Upload KML file") / "upload_trace" >> loggedInToLatitude,
-      Menu.i("Map in database") / "locations" / "google_database_map" >> loggedInToLatitude >> Hidden,
-      Menu.i("Logout") / "logout" >> loggedInToLatitude >> EarlyResponse(() => {
+      Menu.i("Browse database") / "locations" / "day" / "index" >> loggedIn,
+      Menu.i("List") / "locations" / "list_locations" >> loggedIn >> Hidden,
+      Menu.i("Upload KML file") / "upload_trace" >> loggedIn,
+      Menu.i("Map in database") / "locations" / "google_database_map" >> loggedIn >> Hidden,
+      Menu.i("Plan") / "locations" / "plan" >> loggedIn >> Hidden,
+      Menu.i("Logout") / "logout" >> loggedIn >> EarlyResponse(() => {
         LatitudeResource.remove()
         Full(RedirectResponse("/"))
       }))
@@ -141,6 +142,8 @@ class Boot {
         RewriteResponse("locations" :: "list_locations" :: Nil, Map("date" -> date))
       case RewriteRequest(ParsePath(List("locations", "day", date, "map"), _, _, _), _, _) if date != "index" =>
         RewriteResponse("locations" :: "google_database_map" :: Nil, Map("date" -> date))
+      case RewriteRequest(ParsePath(List("locations", "day", date, "plan"), _, _, _), _, _) if date != "index" =>
+        RewriteResponse("locations" :: "plan" :: Nil, Map("date" -> date))
       case RewriteRequest(ParsePath(List("google_map", date), _, _, _), _, _) if date != "today" =>
         RewriteResponse("google_map" :: Nil, Map("date" -> date))
     }
