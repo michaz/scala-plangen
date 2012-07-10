@@ -13,22 +13,23 @@ import org.matsim.core.utils.geometry.CoordImpl
 import java.util
 
 
-abstract class PlanElement {
-  def startTime: util.Date
-  def endTime: util.Date
-}
+abstract class PlanElement
 
 case class Activity(activity: List[Location]) extends PlanElement {
   override def toString = "Act (" + startTime + "," + endTime + ") @ " + location
-  override def startTime = activity.head.timestamp
-  override def endTime = activity.last.timestamp
+  def startTime = activity.head.timestamp
+  def endTime = activity.last.timestamp
   def location = activity.head.location
 }
 
 case class Leg(activity1: List[Location], leg: List[List[Location]], activity2: List[Location]) extends PlanElement {
   override def toString = "Leg (" + startTime + "," + endTime + "): (" + activity1.last.location + "," + activity2.head.location
-  override def startTime = activity1.last.timestamp
-  override def endTime = activity2.head.timestamp
+  def startTime = activity1.last.timestamp
+  def endTime = activity2.head.timestamp
+}
+
+case class Other(segments: List[List[Location]]) extends PlanElement {
+  override def toString = segments.size + " other Elements."
 }
 
 /**
@@ -56,8 +57,17 @@ object ShowPlan extends Logger {
         val locations = Location.findByDay(date)
         val segmentedLocations = segmentLocations(locations)
         val actsAndLegs = legs(segmentedLocations)
-        "#plan *" #> Text(actsAndLegs.toString)
-      }
+        "#plan *" #> Text(actsAndLegs.toString) &
+        "#planList *" #> actsAndLegs.map { planElement =>
+          "#planElementText *" #> planElement.toString &
+          "#locations *" #> (planElement match {
+            case Activity(segment) => segment.map(loc => "#locationText *" #> Text(loc.toString))
+            case Leg(act1, leg, act2) => leg.flatten.map(loc => "#locationText *" #> Text(loc.toString))
+            case Other(other) => other.flatten.map(loc => "#locationText *" #> Text(loc.toString))
+            case _ => Nil
+            })
+          }
+        }
       case _ => {
         "#plan *" #> Text("Not logged in.")
       }
@@ -105,9 +115,10 @@ object ShowPlan extends Logger {
   def legs(xs: List[List[Location]]): List[Any] = {
     xs match {
       case act1 :: LegActivityTail(leg, act2, tail) if isSignificant(act1) => Activity(act1) :: Leg(act1, leg, act2) :: legs(act2 :: tail)
-      case act :: tailWithoutAnotherActivity if isSignificant(act) => Activity(act) :: Nil
-      case _ :: tail => legs(tail)
+      case act :: tailWithoutAnotherActivity if isSignificant(act) => Activity(act) :: legs(tailWithoutAnotherActivity)
+      case LegActivityTail(leg, act, tail) => Other(leg) :: legs(act :: tail)
       case Nil => Nil
+      case onlyInsignificantStuff => Other(onlyInsignificantStuff) :: Nil
     }
   }
 
