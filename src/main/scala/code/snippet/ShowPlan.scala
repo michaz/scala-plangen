@@ -4,13 +4,15 @@ import _root_.net.liftweb.util._
 import Helpers._
 import net.liftweb.common.{Full, Logger}
 import java.text.SimpleDateFormat
-import xml.Text
+import xml.{NodeSeq, Text}
 import net.liftweb.http.S
 import data.mongo.{LatLong, Location}
 import org.joda.time.{DateTime, Duration}
 import org.matsim.core.utils.geometry.transformations.TransformationFactory
 import org.matsim.core.utils.geometry.CoordImpl
-
+import net.liftweb.http.js.{JsCmd, JsObj}
+import net.liftweb.http.js.JE.{JsRaw, JsArray, JsObj}
+import net.liftweb.http.js.JsCmds.{OnLoad, Script, JsCrVar}
 
 
 /**
@@ -23,7 +25,7 @@ import org.matsim.core.utils.geometry.CoordImpl
  * objects, singletons.  Singletons are useful if there's
  * no explicit state managed in the snippet.
  */
-object ShowPlan extends Logger {
+class ShowPlan extends Logger {
 
   trait Segment {
     def minutes: Long
@@ -73,11 +75,13 @@ object ShowPlan extends Logger {
   val COORDINATE_SYSTEM = TransformationFactory.DHDN_GK4
   val t = TransformationFactory.getCoordinateTransformation("WGS84", COORDINATE_SYSTEM)
 
+  var actsAndLegs: List[PlanElement] = Nil
+
   def render = {
 
     def renderSegments(segments: scala.List[List[Location]]): List[CssSel] = {
       segments.map { locations =>
-       "#locationList *" #> locations.map { location =>
+        "#locationList *" #> locations.map { location =>
           "#locationText *" #> Text(location.toString)
         } & "#segmentText *" #> Text(Segment.toSegment(locations).minutes + " Minuten langes Segment. Signifikant: " + Segment.toSegment(locations).isSignificant)
 
@@ -89,23 +93,48 @@ object ShowPlan extends Logger {
         val date = theDateFormat.parse(dateParam)
         val locations = Location.findByDay(date)
         val segmentedLocations = segmentLocations(locations)
-        val actsAndLegs = toPlanElements(segmentedLocations)
+        actsAndLegs = toPlanElements(segmentedLocations)
         assert(actsAndLegs.map(planElement => planElement.segments).flatten.map(segment => segment.locations).flatten.size == locations.size)
-          "#planList *" #> actsAndLegs.map { planElement =>
-            "#planElementText *" #> planElement.toString &
-              "#segmentList *" #> (planElement match {
-                case Activity(segment) => renderSegments(segment :: Nil)
-                case Leg(act1, leg, act2) => renderSegments(leg)
-                case Other(other) => renderSegments(other)
-                case _ => Nil
-              })
-          }
+        "#planList *" #> actsAndLegs.map { planElement =>
+          "#planElementText *" #> planElement.toString &
+            "#segmentList *" #> (planElement match {
+              case Activity(segment) => renderSegments(segment :: Nil)
+              case Leg(act1, leg, act2) => renderSegments(leg)
+              case Other(other) => renderSegments(other)
+              case _ => Nil
+            })
+        }
       }
       case _ => {
         "#plan *" #> Text("Not logged in.")
       }
     }
 
+  }
+
+  // converts a the location into a JSON Object
+  def makeLocation(title: String, lat: String, lng: String): JsObj = {
+    JsObj(("title", title),
+      ("lat", lat),
+      ("lng", lng))
+  }
+
+  // called by renderGoogleMap which passes the list of locations
+  // into the javascript function as json objects
+  def ajaxFunc(locobj: Seq[JsObj]): JsCmd = {
+    JsCrVar("locations", JsObj(("loc", JsArray(locobj: _*)))) & JsRaw("drawmap(locations)").cmd
+  }
+
+  def renderGoogleMap = renderLocations(actsAndLegs)
+
+  def renderLocations(planElements: List[PlanElement]): NodeSeq = {
+    val jsLocations: Seq[JsObj] = planElements.collect {
+      case activity: Activity => makeLocation(activity.endTime.toString, activity.location.lat.toString, activity.location.long.toString)
+    }
+
+    (<head>
+      {Script(OnLoad(ajaxFunc(jsLocations)))}
+    </head>)
   }
 
   def segmentLocations(locations: List[Location]): List[List[Location]] = {
@@ -116,7 +145,6 @@ object ShowPlan extends Logger {
       }
       case Nil => Nil
     }
-
   }
 
   def calcDistance(first: LatLong, second: LatLong) = {
