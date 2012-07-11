@@ -10,27 +10,8 @@ import data.mongo.{LatLong, Location}
 import org.joda.time.{DateTime, Duration}
 import org.matsim.core.utils.geometry.transformations.TransformationFactory
 import org.matsim.core.utils.geometry.CoordImpl
-import java.util
 
 
-abstract class PlanElement
-
-case class Activity(activity: List[Location]) extends PlanElement {
-  override def toString = "Act (" + startTime + "," + endTime + ") @ " + location
-  def startTime = activity.head.timestamp
-  def endTime = activity.last.timestamp
-  def location = activity.head.location
-}
-
-case class Leg(activity1: List[Location], leg: List[List[Location]], activity2: List[Location]) extends PlanElement {
-  override def toString = "Leg (" + startTime + "," + endTime + "): (" + activity1.last.location + "," + activity2.head.location
-  def startTime = activity1.last.timestamp
-  def endTime = activity2.head.timestamp
-}
-
-case class Other(segments: List[List[Location]]) extends PlanElement {
-  override def toString = segments.size + " other Elements."
-}
 
 /**
  * A snippet transforms input to output... it transforms
@@ -44,16 +25,63 @@ case class Other(segments: List[List[Location]]) extends PlanElement {
  */
 object ShowPlan extends Logger {
 
+  trait Segment {
+    def minutes: Long
+    def isSignificant: Boolean
+    def locations: List[Location]
+  }
+
+  object Segment {
+    implicit def toSegment(_locations: List[Location]) = new Segment {
+      override def minutes = {
+        val startTime = locations.head.timestamp
+        val endTime = locations.last.timestamp
+        val minutes = new Duration(new DateTime(startTime), new DateTime(endTime)).getStandardMinutes
+        minutes
+      }
+      override def isSignificant = minutes > 5
+      override def locations = _locations
+    }
+  }
+
+  abstract class PlanElement {
+    def segments: List[Segment]
+  }
+
+  case class Activity(activity: List[Location]) extends PlanElement {
+    override def toString = "Act (" + startTime + "," + endTime + ") @ " + location
+    def startTime = activity.head.timestamp
+    def endTime = activity.last.timestamp
+    def location = activity.head.location
+    override def segments = Segment.toSegment(activity) :: Nil
+  }
+
+  case class Leg(activity1: List[Location], leg: List[List[Location]], activity2: List[Location]) extends PlanElement {
+    override def toString = "Leg (" + startTime + "," + endTime + "): (" + activity1.last.location + "," + activity2.head.location
+    def startTime = activity1.last.timestamp
+    def endTime = activity2.head.timestamp
+    override def segments = leg.map(Segment.toSegment(_))
+  }
+
+  case class Other(other: List[List[Location]]) extends PlanElement {
+    override def toString = segments.size + " other Elements."
+    override def segments = other.map(Segment.toSegment(_))
+  }
+
   private[this] def theDateFormat = new SimpleDateFormat("yyyy-MM-dd")
 
   val COORDINATE_SYSTEM = TransformationFactory.DHDN_GK4
   val t = TransformationFactory.getCoordinateTransformation("WGS84", COORDINATE_SYSTEM)
 
   def render = {
-    println(S.param("date"))
 
     def renderSegments(segments: scala.List[List[Location]]): List[CssSel] = {
-      segments.map(segment => "#locationList *" #> segment.map(location => "#locationText *" #> Text(location.toString)))
+      segments.map { locations =>
+       "#locationList *" #> locations.map { location =>
+          "#locationText *" #> Text(location.toString)
+        } & "#segmentText *" #> Text(Segment.toSegment(locations).minutes + " Minuten langes Segment. Signifikant: " + Segment.toSegment(locations).isSignificant)
+
+      }
     }
 
     S.param("date") match {
@@ -61,18 +89,18 @@ object ShowPlan extends Logger {
         val date = theDateFormat.parse(dateParam)
         val locations = Location.findByDay(date)
         val segmentedLocations = segmentLocations(locations)
-        val actsAndLegs = legs(segmentedLocations)
-        "#plan *" #> Text(actsAndLegs.toString) &
-        "#planList *" #> actsAndLegs.map { planElement =>
-          "#planElementText *" #> planElement.toString &
-          "#segmentList *" #> (planElement match {
-            case Activity(segment) => renderSegments(segment :: Nil)
-            case Leg(act1, leg, act2) => renderSegments(leg)
-            case Other(other) => renderSegments(other)
-            case _ => Nil
-            })
+        val actsAndLegs = toPlanElements(segmentedLocations)
+        assert(actsAndLegs.map(planElement => planElement.segments).flatten.map(segment => segment.locations).flatten.size == locations.size)
+          "#planList *" #> actsAndLegs.map { planElement =>
+            "#planElementText *" #> planElement.toString &
+              "#segmentList *" #> (planElement match {
+                case Activity(segment) => renderSegments(segment :: Nil)
+                case Leg(act1, leg, act2) => renderSegments(leg)
+                case Other(other) => renderSegments(other)
+                case _ => Nil
+              })
           }
-        }
+      }
       case _ => {
         "#plan *" #> Text("Not logged in.")
       }
@@ -100,11 +128,9 @@ object ShowPlan extends Logger {
     scala.math.sqrt(dx*dx + dy*dy)
   }
 
-  def isSignificant(segment: List[Location]) = {
-    val startTime = segment.head.timestamp
-    val endTime = segment.last.timestamp
-    val minutes = new Duration(new DateTime(startTime), new DateTime(endTime)).getStandardMinutes
-    minutes > 5
+
+  def isSignificant(segment: Segment) = {
+    segment.isSignificant
   }
 
   object LegActivityTail {
@@ -117,13 +143,21 @@ object ShowPlan extends Logger {
     }
   }
 
-  def legs(xs: List[List[Location]]): List[Any] = {
+  def toPlanElements(xs: List[List[Location]]): List[PlanElement] = {
     xs match {
-      case act1 :: LegActivityTail(leg, act2, tail) if isSignificant(act1) => Activity(act1) :: Leg(act1, leg, act2) :: legs(act2 :: tail)
-      case act :: tailWithoutAnotherActivity if isSignificant(act) => Activity(act) :: legs(tailWithoutAnotherActivity)
-      case LegActivityTail(leg, act, tail) => Other(leg) :: legs(act :: tail)
+      case act1 :: LegActivityTail(leg, act2, tail) if isSignificant(act1) => {
+        Activity(act1) :: Leg(act1, leg, act2) :: toPlanElements(act2 :: tail)
+      }
+      case act :: tailWithoutAnotherActivity if isSignificant(act) => {
+        Activity(act) :: toPlanElements(tailWithoutAnotherActivity)
+      }
+      case head::LegActivityTail(tailleg, act, tail) => {
+        Other(head::tailleg) :: toPlanElements(act :: tail)
+      }
       case Nil => Nil
-      case onlyInsignificantStuff => Other(onlyInsignificantStuff) :: Nil
+      case onlyInsignificantStuff => {
+        Other(onlyInsignificantStuff) :: Nil
+      }
     }
   }
 
