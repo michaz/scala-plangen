@@ -19,7 +19,14 @@ object Latitude {
   def getLatitude(mintime: Long) = {
     val credentials = LatitudeResource.is.openTheBox
     val latitude = com.google.api.services.latitude.Latitude.builder(new NetHttpTransport(), new JacksonFactory()).setHttpRequestInitializer(credentials).build();
-    val maybeLocations = Option(latitude.location.list.setMinTime(mintime.toString).setMaxTime((mintime + 24 * 60 * 60 * 1000).toString).setGranularity("best").execute().getItems)
+    val maybeLocations = Option(latitude.location
+      .list
+      .setMinTime(mintime.toString)
+      .setMaxTime((mintime + 24 * 60 * 60 * 1000).toString)
+      .setGranularity("best")
+      .setMaxResults("1000")
+      .execute()
+      .getItems)
     val result: Seq[Location] = maybeLocations match {
       case None => Nil
       case Some(locations) => List(locations:_*)
