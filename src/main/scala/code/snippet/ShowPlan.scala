@@ -119,21 +119,29 @@ class ShowPlan extends Logger {
       ("lng", lng))
   }
 
+  def makeLeg(act1: JsObj, act2: JsObj): JsObj = {
+    JsObj(("start", act1), ("end", act2))
+  }
+
   // called by renderGoogleMap which passes the list of locations
   // into the javascript function as json objects
-  def ajaxFunc(locobj: Seq[JsObj]): JsCmd = {
-    JsCrVar("locations", JsObj(("loc", JsArray(locobj: _*)))) & JsRaw("drawmap(locations)").cmd
+  def ajaxFunc(locobj: Seq[JsObj], legobj: Seq[JsObj]): JsCmd = {
+    JsCrVar("locations", JsObj(("loc", JsArray(locobj: _*)), ("legs", JsArray(legobj: _*)))) & JsRaw("drawmap(locations)").cmd
   }
 
   def renderGoogleMap = renderLocations(actsAndLegs)
 
   def renderLocations(planElements: List[PlanElement]): NodeSeq = {
+
     val jsLocations: Seq[JsObj] = planElements.collect {
       case activity: Activity => makeLocation(activity.endTime.toString, activity.location.lat.toString, activity.location.long.toString)
     }
+    val jsLegs: Seq[JsObj] = planElements.collect {
+      case leg: Leg => JsObj(("points", JsArray( List(leg.activity1, leg.activity2).map {locs => JsObj(("lat", locs.head.location.lat), ("lng", locs.head.location.long))})))
+    }
 
     (<head>
-      {Script(OnLoad(ajaxFunc(jsLocations)))}
+      {Script(OnLoad(ajaxFunc(jsLocations, jsLegs)))}
     </head>)
   }
 

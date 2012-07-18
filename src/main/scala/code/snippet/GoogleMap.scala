@@ -31,7 +31,9 @@ class GoogleMap extends Logger {
     }
     warn("Entering map rendering.")
     val userId = User.currentUserId
-    locations = Latitude.getLatitude(date.getTime).map(jsonLoc => Location(
+    locations = Latitude.getLatitude(date.getTime)
+      .filter(jsonLoc => jsonLoc.getAccuracy != null)
+      .map(jsonLoc => Location(
       ObjectId.get,
       userId,
       LatLong(jsonLoc.getLatitude().asInstanceOf[java.math.BigDecimal].doubleValue(), jsonLoc.getLongitude().asInstanceOf[java.math.BigDecimal].doubleValue()),
