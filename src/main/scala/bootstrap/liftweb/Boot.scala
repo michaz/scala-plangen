@@ -19,13 +19,29 @@ import com.google.api.client.json.jackson.JacksonFactory
 import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.googleapis.auth.oauth2.{GoogleCredential, GoogleAuthorizationCodeTokenRequest, GoogleAuthorizationCodeRequestUrl}
 import com.google.api.client.auth.oauth2.Credential
+import service.User
 
 
 case class OAuth2ClientCredentials(CLIENT_ID: String, CLIENT_SECRET: String)
 
 object OAuth2ClientCredentials extends OAuth2ClientCredentials("608965655114-3tm53d29c3dan6nna8eif98chq24dm60.apps.googleusercontent.com", "KgSRkmAsz9WeYmAqO7zvOV_z")
 
-object LatitudeResource extends SessionVar[Box[Credential]](Empty)
+object LatitudeResource extends RequestVar[Box[Credential]](Empty)
+
+object CurrentUser extends SessionVar[Box[User]](Empty)
+
+object MyBoot {  // Grauenhaft!! Wie geht das richtig?
+  var baseUrl: String = ""
+  // where to search snippet
+
+  LiftRules.addToPackages("code")
+  def googleUrl(localUrl: String) = new GoogleAuthorizationCodeRequestUrl(
+    OAuth2ClientCredentials.CLIENT_ID,
+    baseUrl + "Callback", //TODO: Rausfinden, wie man callback an dieser Stelle auflösen kann.
+    Arrays.asList(LatitudeScopes.LATITUDE_ALL_BEST)
+  ).setState(localUrl).build()
+
+}
 
 /**
  * A class that's instantiated early and run.  It allows the application
@@ -63,7 +79,13 @@ class Boot {
       }
     }
 
+    MyBoot.baseUrl = baseUrl
 
+    def googleLoginUrl = new GoogleAuthorizationCodeRequestUrl(
+      OAuth2ClientCredentials.CLIENT_ID,
+      baseUrl + "Callback", //TODO: Rausfinden, wie man callback an dieser Stelle auflösen kann.
+      Arrays.asList("https://www.googleapis.com/auth/userinfo.profile")
+    ).setState("/login").build()
 
     val callback: Loc[Unit] = Loc("Callback", "Callback" :: Nil, "Callback", Hidden
       , EarlyResponse(() => {
@@ -85,8 +107,16 @@ class Boot {
               .setTransport(new NetHttpTransport())
               .build().setFromTokenResponse(tokenResponse)
 
-            LatitudeResource.set(Full(credential))
-            Full(RedirectResponse("/"))
+
+            S.param("state") match {
+              case Full("/login") => {
+                CurrentUser.set(Full(new User(credential)))
+                Full(RedirectResponse("/"))
+              }
+              case Full(other) => Full(RedirectWithState(other, RedirectState(()=>LatitudeResource.set(Full(credential)))))
+              case _: EmptyBox => Full(RedirectResponse("/"))
+            }
+
           }
           case _ => {
             Empty
@@ -95,18 +125,12 @@ class Boot {
       })
     )
 
-    // where to search snippet
-    LiftRules.addToPackages("code")
-    def url = new GoogleAuthorizationCodeRequestUrl(
-      OAuth2ClientCredentials.CLIENT_ID,
-      baseUrl + "Callback", //TODO: Rausfinden, wie man callback an dieser Stelle auflösen kann.
-      Arrays.asList(LatitudeScopes.LATITUDE_ALL_BEST, "https://www.googleapis.com/auth/userinfo.profile")
-    ).build()
 
-    val loggedIn = If(() => LatitudeResource.is.isDefined,
-      () => RedirectResponse(url))
 
-    val notLoggedInToLatitude = If(() => LatitudeResource.is.isEmpty,
+    val loggedIn = If(() => CurrentUser.is.isDefined,
+      () => RedirectResponse(MyBoot.googleUrl("/")))
+
+    val notLoggedIn = If(() => CurrentUser.is.isEmpty,
       () => RedirectResponse("/"))
 
 
@@ -119,17 +143,17 @@ class Boot {
     val sitemap = SiteMap(
       Menu.i("Home") / "index", // the simple way to declare a menu
       Menu(callback),
-      Menu(Loc("Import from Latitude", "google_map" :: "today" :: Nil, "Import from Latitude", loggedIn, EarlyResponse(() => Full(RedirectResponse("/google_map/" + theDateFormat.format(new Date)))))),
+      Menu(Loc("Import from Latitude", "google_map" :: "today" :: Nil, "Import from Latitude", loggedIn, EarlyResponse(() => Full(RedirectResponse(MyBoot.googleUrl("/google_map/" + theDateFormat.format(new Date))))))),
       Menu(Loc("Browse Latitude", "google_map" :: Nil, "Browse Latitude", loggedIn, Hidden)),
 
-      Menu(Loc("Log-in to Latitude", ExtLink(url), "Log-in to Latitude", notLoggedInToLatitude)),
+      Menu(Loc("Log-in via Google", ExtLink(googleLoginUrl), "Log-in via Google", notLoggedIn)),
       Menu.i("Browse database") / "locations" / "day" / "index" >> loggedIn,
       Menu.i("List") / "locations" / "list_locations" >> loggedIn >> Hidden,
       Menu.i("Upload KML file") / "upload_trace" >> loggedIn,
       Menu.i("Map in database") / "locations" / "google_database_map" >> loggedIn >> Hidden,
       Menu.i("Plan") / "locations" / "plan" >> loggedIn >> Hidden,
       Menu.i("Logout") / "logout" >> loggedIn >> EarlyResponse(() => {
-        LatitudeResource.remove()
+        CurrentUser.remove()
         Full(RedirectResponse("/"))
       }))
 

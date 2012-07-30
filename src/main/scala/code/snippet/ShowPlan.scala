@@ -10,9 +10,10 @@ import data.mongo.{LatLong, Location}
 import org.joda.time.{DateTime, Duration}
 import org.matsim.core.utils.geometry.transformations.TransformationFactory
 import org.matsim.core.utils.geometry.CoordImpl
-import net.liftweb.http.js.{JsCmd, JsObj}
+import net.liftweb.http.js.{JsExp, JE, JsCmd, JsObj}
 import net.liftweb.http.js.JE.{JsRaw, JsArray, JsObj}
 import net.liftweb.http.js.JsCmds.{OnLoad, Script, JsCrVar}
+import java.util.Date
 
 
 /**
@@ -48,26 +49,31 @@ class ShowPlan extends Logger {
 
   abstract class PlanElement {
     def segments: List[Segment]
+    def startTime: Date
+    def endTime: Date
+    def minutes = new Duration(new DateTime(startTime), new DateTime(endTime)).getStandardMinutes
   }
 
   case class Activity(activity: List[Location]) extends PlanElement {
     override def toString = "Act (" + startTime + "," + endTime + ") @ " + location
-    def startTime = activity.head.timestamp
-    def endTime = activity.last.timestamp
+    override def startTime = activity.head.timestamp
+    override def endTime = activity.last.timestamp
     def location = activity.head.location
     override def segments = Segment.toSegment(activity) :: Nil
   }
 
   case class Leg(activity1: List[Location], leg: List[List[Location]], activity2: List[Location]) extends PlanElement {
     override def toString = "Leg (" + startTime + "," + endTime + "): (" + activity1.last.location + "," + activity2.head.location
-    def startTime = activity1.last.timestamp
-    def endTime = activity2.head.timestamp
+    override def startTime = activity1.last.timestamp
+    override def endTime = activity2.head.timestamp
     override def segments = leg.map(Segment.toSegment(_))
   }
 
   case class Other(other: List[List[Location]]) extends PlanElement {
     override def toString = segments.size + " other Elements."
     override def segments = other.map(Segment.toSegment(_))
+    override def startTime = other.head.head.timestamp
+    override def endTime = other.last.last.timestamp
   }
 
   private[this] def theDateFormat = new SimpleDateFormat("yyyy-MM-dd")
@@ -112,12 +118,6 @@ class ShowPlan extends Logger {
 
   }
 
-  // converts a the location into a JSON Object
-  def makeLocation(title: String, lat: String, lng: String): JsObj = {
-    JsObj(("title", title),
-      ("lat", lat),
-      ("lng", lng))
-  }
 
   def makeLeg(act1: JsObj, act2: JsObj): JsObj = {
     JsObj(("start", act1), ("end", act2))
@@ -125,8 +125,22 @@ class ShowPlan extends Logger {
 
   // called by renderGoogleMap which passes the list of locations
   // into the javascript function as json objects
-  def ajaxFunc(locobj: Seq[JsObj], legobj: Seq[JsObj]): JsCmd = {
+  def ajaxFuncDrawMap(locobj: Seq[JsObj], legobj: Seq[JsObj]): JsCmd = {
     JsCrVar("locations", JsObj(("loc", JsArray(locobj: _*)), ("legs", JsArray(legobj: _*)))) & JsRaw("drawmap(locations)").cmd
+  }
+
+  def ajaxFuncDrawChart(planElements: List[PlanElement]): JsCmd = {
+    JsCrVar("data",
+      JsArray(JsArray(JsExp.strToJsExp("Plan element") :: planElements.collect {
+        case activity: Activity => JsExp.strToJsExp("Activity")
+        case leg: Leg => JsExp.strToJsExp("Leg")
+        case other: Other => JsExp.strToJsExp("Other")
+      }),
+      JsArray(JsExp.strToJsExp("Duration") :: planElements.collect {
+        case activity: Activity => JsExp.longToJsExp(activity.minutes)
+        case leg: Leg => JsExp.longToJsExp(leg.minutes)
+        case other: Other => JsExp.longToJsExp(other.minutes)
+      }))) & JsRaw("drawChart(data)").cmd
   }
 
   def renderGoogleMap = renderLocations(actsAndLegs)
@@ -134,15 +148,34 @@ class ShowPlan extends Logger {
   def renderLocations(planElements: List[PlanElement]): NodeSeq = {
 
     val jsLocations: Seq[JsObj] = planElements.collect {
-      case activity: Activity => makeLocation(activity.endTime.toString, activity.location.lat.toString, activity.location.long.toString)
+      case activity: Activity => makeActivity(activity)
     }
     val jsLegs: Seq[JsObj] = planElements.collect {
-      case leg: Leg => JsObj(("points", JsArray( List(leg.activity1, leg.activity2).map {locs => JsObj(("lat", locs.head.location.lat), ("lng", locs.head.location.long))})))
+      case leg: Leg => makeLeg(leg)
     }
 
     (<head>
-      {Script(OnLoad(ajaxFunc(jsLocations, jsLegs)))}
+      {Script(OnLoad(ajaxFuncDrawMap(jsLocations, jsLegs)))}
+      {Script(OnLoad(ajaxFuncDrawChart(planElements)))}
     </head>)
+  }
+
+
+  def makeLeg(leg: ShowPlan.this.type#Leg): JsObj = {
+    val distance = calcDistance(leg.activity1.head.location, leg.activity2.head.location)
+    val duration = new Duration(new DateTime(leg.startTime), new DateTime(leg.endTime)).getStandardSeconds
+    JsObj(("points", JsArray(List(leg.activity1, leg.activity2).map {
+      locs => JsObj(("lat", locs.head.location.lat), ("lng", locs.head.location.long))
+    })), ("title",
+      new DateTime(leg.startTime).toString("HH:mm") + "-" + new DateTime(leg.endTime).toString("HH:mm") + " "
+        + (distance/1000).formatted("%.2f")+"km" + " "
+    + ((distance / duration) * 3.6 formatted "%.2f"+"km/h")))
+  }
+
+  def makeActivity(activity: Activity): JsObj = {
+    JsObj(("title", new DateTime(activity.startTime).toString("HH:mm") + "-" + new DateTime(activity.endTime).toString("HH:mm")),
+      ("lat", activity.location.lat.toString),
+      ("lng", activity.location.long.toString))
   }
 
   def segmentLocations(locations: List[Location]): List[List[Location]] = {

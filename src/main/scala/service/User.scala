@@ -5,7 +5,7 @@ import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.jackson.JacksonFactory
 import data.mongo.Location
 import net.liftweb.mongodb.BsonDSL._
-import bootstrap.liftweb.LatitudeResource
+import com.google.api.client.auth.oauth2.Credential
 
 /**
  * Created with IntelliJ IDEA.
@@ -15,9 +15,11 @@ import bootstrap.liftweb.LatitudeResource
  * To change this template use File | Settings | File Templates.
  */
 
-object User {
+class User(login: Credential) {
 
-  def currentUserId: String = Oauth2.builder(new NetHttpTransport(), new JacksonFactory()).setHttpRequestInitializer(LatitudeResource.is.openTheBox).build.userinfo.get.execute.getId
+  def currentUserId: String = {
+    Oauth2.builder(new NetHttpTransport(), new JacksonFactory()).setHttpRequestInitializer(login).build.userinfo.get.execute.getId
+  }
 
   def findAllLocations = Location.findAll("user_id" -> currentUserId)
 

@@ -13,6 +13,7 @@ import java.util.Date
 import java.text.SimpleDateFormat
 import xml.NodeSeq
 import service.User
+import bootstrap.liftweb.CurrentUser
 
 class GoogleDatabaseMap extends Logger {
 
@@ -68,7 +69,7 @@ class GoogleDatabaseMap extends Logger {
     "#morgen [href]" #> ("/locations/day/" + theDateFormat.format(new Date(date.getTime + 24 *60*60*1000)) + "/map") &
     "#date" #> SHtml.text(theDateFormat.format(date), content => JsCmds.RedirectTo("/locations/day/" + content + "/map")) &
     "#delete_all [onClick]" #> SHtml.ajaxInvoke(()=>{
-      User.findAllLocations.foreach(_.delete)
+      CurrentUser.is.openTheBox.findAllLocations.foreach(_.delete)
       JsCmds.Alert("Done")
     }) &
     "#delete_day [onClick]" #> SHtml.ajaxInvoke(() => {

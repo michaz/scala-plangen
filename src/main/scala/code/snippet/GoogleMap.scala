@@ -14,6 +14,7 @@ import java.text.SimpleDateFormat
 import org.bson.types.ObjectId
 import data.mongo.{LatLong, Location}
 import service.{Latitude, User}
+import bootstrap.liftweb.{CurrentUser, MyBoot, Boot}
 
 
 class GoogleMap extends Logger {
@@ -30,7 +31,7 @@ class GoogleMap extends Logger {
       case _ => date = new Date
     }
     warn("Entering map rendering.")
-    val userId = User.currentUserId
+    val userId = CurrentUser.is.openTheBox.currentUserId
     locations = Latitude.getLatitude(date.getTime)
       .filter(jsonLoc => jsonLoc.getAccuracy != null)
       .map(jsonLoc => Location(
@@ -53,9 +54,9 @@ class GoogleMap extends Logger {
   }
 
   def renderButton = {
-    "#gestern [href]" #> ("/google_map/" + theDateFormat.format(new Date(date.getTime - 24 * 60 * 60 * 1000))) &
-      "#morgen [href]" #> ("/google_map/" + theDateFormat.format(new Date(date.getTime + 24 * 60 * 60 * 1000))) &
-      "#date" #> SHtml.text(theDateFormat.format(date), content => JsCmds.RedirectTo("/google_map/" + content)) &
+    "#gestern [href]" #> MyBoot.googleUrl("/google_map/" + theDateFormat.format(new Date(date.getTime - 24 * 60 * 60 * 1000))) &
+      "#morgen [href]" #> MyBoot.googleUrl("/google_map/" + theDateFormat.format(new Date(date.getTime + 24 * 60 * 60 * 1000))) &
+      "#date" #> SHtml.text(theDateFormat.format(date), content => JsCmds.RedirectTo(MyBoot.googleUrl(("/google_map/" + content)))) &
       "#submit [onClick]" #> SHtml.ajaxInvoke(() => {
         Location.findByDay(date).foreach(_.delete)
         locations.foreach(_.save)

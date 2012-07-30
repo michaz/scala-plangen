@@ -8,7 +8,7 @@ import xml.XML
 import gpx.ParseKml
 import data.mongo.{LatLong, Location}
 import org.bson.types.ObjectId
-import service.User
+import bootstrap.liftweb.CurrentUser
 
 /**
  * Created with IntelliJ IDEA.
@@ -23,7 +23,7 @@ object Upload extends Logger {
   object uploadedFile extends RequestVar[FileParamHolder](null)
 
   def processUpload = {
-    val user = User.currentUserId
+    val user = CurrentUser.is.openTheBox.currentUserId
     info("Uploaded file. " + uploadedFile.is.fileName + " " + uploadedFile.is.mimeType)
     val tracks = XML.load(uploadedFile.is.fileStream) \\ "Track"
     info("Found " + tracks.size + " tracks in KML.")
