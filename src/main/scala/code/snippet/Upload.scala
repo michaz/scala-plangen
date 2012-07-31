@@ -10,6 +10,8 @@ import data.mongo.{LatLong, Location}
 import org.bson.types.ObjectId
 import bootstrap.liftweb.CurrentUser
 
+import net.liftweb.json.JsonParser._
+
 /**
  * Created with IntelliJ IDEA.
  * User: zilske
@@ -37,7 +39,7 @@ object Upload extends Logger {
       days.foreach(day => Location.findByDay(day.toDateMidnight.toDate).foreach(loc => loc.delete))
       readings.foreach {reading =>
         val coords = reading.coord.split(" ").map{java.lang.Double.parseDouble(_)}
-        Location(ObjectId.get, user, LatLong( coords(1), coords(0) ), reading.when.toDate).save
+        Location(ObjectId.get, user, LatLong( coords(1), coords(0)), reading.when.toDate, parse("")).save
         nDays = nDays + 1
       }
     })

@@ -14,6 +14,8 @@ import java.text.SimpleDateFormat
 import org.bson.types.ObjectId
 import data.mongo.{LatLong, Location}
 import service.{Latitude, User}
+
+import net.liftweb.json.JsonParser._
 import bootstrap.liftweb.{CurrentUser, MyBoot, Boot}
 
 
@@ -34,11 +36,17 @@ class GoogleMap extends Logger {
     val userId = CurrentUser.is.openTheBox.currentUserId
     locations = Latitude.getLatitude(date.getTime)
       .filter(jsonLoc => jsonLoc.getAccuracy != null)
-      .map(jsonLoc => Location(
-      ObjectId.get,
-      userId,
-      LatLong(jsonLoc.getLatitude().asInstanceOf[java.math.BigDecimal].doubleValue(), jsonLoc.getLongitude().asInstanceOf[java.math.BigDecimal].doubleValue()),
-      new Date(jsonLoc.getTimestampMs().asInstanceOf[String].toLong)))
+      .map(jsonLoc => {
+      info(jsonLoc.toPrettyString)
+      val loc = Location(
+        ObjectId.get,
+        userId,
+        LatLong(jsonLoc.getLatitude().asInstanceOf[java.math.BigDecimal].doubleValue(), jsonLoc.getLongitude().asInstanceOf[java.math.BigDecimal].doubleValue()),
+        new Date(jsonLoc.getTimestampMs().asInstanceOf[String].toLong),
+        parse(jsonLoc.toPrettyString))
+      loc
+    })
+
     renderGoogleMap()
   }
 

@@ -9,6 +9,7 @@ import scala.collection.JavaConversions._
 import service.User
 import net.liftweb.common.Logger
 import bootstrap.liftweb.CurrentUser
+import net.liftweb.json.JsonAST.{JValue, JObject}
 
 case class LatLong(lat: Double, long: Double)
 
@@ -47,6 +48,6 @@ object Location extends MongoDocumentMeta[Location] with Logger {
 
 }
 
-case class Location(_id: ObjectId, user_id: String, location: LatLong, timestamp: Date) extends MongoDocument[Location] {
+case class Location(_id: ObjectId, user_id: String, location: LatLong, timestamp: Date, raw: JValue) extends MongoDocument[Location] {
   def meta = Location
 }
