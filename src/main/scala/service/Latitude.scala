@@ -5,6 +5,7 @@ import com.google.api.client.http.javanet.NetHttpTransport
 import bootstrap.liftweb.LatitudeResource
 import com.google.api.services.latitude.model.Location
 import scala.collection.JavaConversions._
+import net.liftweb.common.Logger
 
 /**
  * Created with IntelliJ IDEA.
@@ -14,7 +15,7 @@ import scala.collection.JavaConversions._
  * To change this template use File | Settings | File Templates.
  */
 
-object Latitude {
+object Latitude extends Logger {
 
   def getLatitude(mintime: Long) = {
     val credentials = LatitudeResource.is.openTheBox
@@ -31,6 +32,7 @@ object Latitude {
       case None => Nil
       case Some(locations) => List(locations:_*)
     }
+    info("Got " + result.size.toString + " points from Latitude.")
     result
   }
 

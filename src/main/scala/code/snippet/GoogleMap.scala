@@ -35,7 +35,7 @@ class GoogleMap extends Logger {
     warn("Entering map rendering.")
     val userId = CurrentUser.is.openTheBox.currentUserId
     locations = Latitude.getLatitude(date.getTime)
-      .filter(jsonLoc => jsonLoc.getAccuracy != null)
+      // .filter(jsonLoc => jsonLoc.getAccuracy != null)
       .map(jsonLoc => {
       info(jsonLoc.toPrettyString)
       val loc = Location(
@@ -46,7 +46,7 @@ class GoogleMap extends Logger {
         parse(jsonLoc.toPrettyString))
       loc
     })
-
+    info("Got " + locations.size + " locations.")
     renderGoogleMap()
   }
 

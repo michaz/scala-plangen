@@ -28,11 +28,24 @@ import java.util.Date
  */
 class ShowPlan extends Logger {
 
+  val SMALL = 70.0
+  val SNAP_TO_FACILITY = 200.0
+
+  case class Facility(name: String, location: LatLong)
+
+  case class LabelledFacility(facility: Facility)
+
+  case class Segmentation(segments: List[Segment], distanceToNext: Map[Location, Double])
+
+  type Labelling = (List[LabelledSegment], List[LabelledFacility])
+
+
   trait Segment {
     def minutes: Long
-    def isSignificant: Boolean
     def locations: List[Location]
   }
+
+  case class LabelledSegment(segment: Segment, needsFacility: Boolean, facility: Option[Facility])
 
   object Segment {
     implicit def toSegment(_locations: List[Location]) = new Segment {
@@ -42,7 +55,6 @@ class ShowPlan extends Logger {
         val minutes = new Duration(new DateTime(startTime), new DateTime(endTime)).getStandardMinutes
         minutes
       }
-      override def isSignificant = minutes > 5
       override def locations = _locations
     }
   }
@@ -54,26 +66,26 @@ class ShowPlan extends Logger {
     def minutes = new Duration(new DateTime(startTime), new DateTime(endTime)).getStandardMinutes
   }
 
-  case class Activity(activity: List[Location]) extends PlanElement {
+  case class Activity(activity: LabelledSegment) extends PlanElement {
     override def toString = "Act (" + startTime + "," + endTime + ") @ " + location
-    override def startTime = activity.head.timestamp
-    override def endTime = activity.last.timestamp
-    def location = activity.head.location
-    override def segments = Segment.toSegment(activity) :: Nil
+    override def startTime = activity.segment.locations.head.timestamp
+    override def endTime = activity.segment.locations.last.timestamp
+    def location = activity.segment.locations.head.location
+    override def segments = activity.segment :: Nil
   }
 
-  case class Leg(activity1: List[Location], leg: List[List[Location]], activity2: List[Location]) extends PlanElement {
-    override def toString = "Leg (" + startTime + "," + endTime + "): (" + activity1.last.location + "," + activity2.head.location
-    override def startTime = activity1.last.timestamp
-    override def endTime = activity2.head.timestamp
-    override def segments = leg.map(Segment.toSegment(_))
+  case class Leg(activity1: LabelledSegment, leg: List[LabelledSegment], activity2: LabelledSegment) extends PlanElement {
+    override def toString = "Leg (" + startTime + "," + endTime + "): (" + activity1.segment.locations.last.location + "," + activity2.segment.locations.head.location
+    override def startTime = activity1.segment.locations.last.timestamp
+    override def endTime = activity2.segment.locations.head.timestamp
+    override def segments = leg.map(_.segment)
   }
 
-  case class Other(other: List[List[Location]]) extends PlanElement {
+  case class Other(other: List[LabelledSegment]) extends PlanElement {
     override def toString = segments.size + " other Elements."
-    override def segments = other.map(Segment.toSegment(_))
-    override def startTime = other.head.head.timestamp
-    override def endTime = other.last.last.timestamp
+    override def segments = other.map(_.segment)
+    override def startTime = other.head.segment.locations.head.timestamp
+    override def endTime = other.last.segment.locations.last.timestamp
   }
 
   private[this] def theDateFormat = new SimpleDateFormat("yyyy-MM-dd")
@@ -85,11 +97,12 @@ class ShowPlan extends Logger {
 
   def render = {
 
-    def renderSegments(segments: scala.List[List[Location]]): List[CssSel] = {
-      segments.map { locations =>
-        "#locationList *" #> locations.map { location =>
-          "#locationText *" #> Text(location.toString)
-        } & "#segmentText *" #> Text(Segment.toSegment(locations).minutes + " Minuten langes Segment. Signifikant: " + Segment.toSegment(locations).isSignificant)
+    def renderSegments(segments: scala.List[LabelledSegment], distanceToNext: Map[Location, Double]): List[CssSel] = {
+      segments.map { segment =>
+        "#locationList *" #> segment.segment.locations.map { location =>
+          "#locationText *" #> Text(location.toString) &
+          "#locationDist *" #> distanceToNext.get(location).getOrElse(0.0).toString
+        } & "#segmentText *" #> Text(segment.segment.minutes + " Minuten langes Segment. Signifikant: " + segment.needsFacility + " Hat Facility: "+ segment.facility.isDefined)
 
       }
     }
@@ -98,15 +111,25 @@ class ShowPlan extends Logger {
       case Full(dateParam) => {
         val date = theDateFormat.parse(dateParam)
         val locations = Location.findByDay(date)
-        val segmentedLocations = segmentLocations(locations)
-        actsAndLegs = toPlanElements(segmentedLocations)
+        val Segmentation(segments, distanceToNext) = segment(locations)
+
+        var facilities: List[Facility] = Nil
+        var labelling = label(segments, facilities)
+
+        for (i <- 1 to 3) {
+          facilities = deriveFacilities(labelling._1.filter(_.needsFacility))
+          labelling = label(segments, facilities)
+        }
+
+        // actsAndLegs = toPlanElements(segmentedLocations.map(_.locations))
+        actsAndLegs = toPlanElements(labelling)
         assert(actsAndLegs.map(planElement => planElement.segments).flatten.map(segment => segment.locations).flatten.size == locations.size)
         "#planList *" #> actsAndLegs.map { planElement =>
           "#planElementText *" #> planElement.toString &
             "#segmentList *" #> (planElement match {
-              case Activity(segment) => renderSegments(segment :: Nil)
-              case Leg(act1, leg, act2) => renderSegments(leg)
-              case Other(other) => renderSegments(other)
+              case Activity(segment) => renderSegments(segment :: Nil, distanceToNext)
+              case Leg(act1, leg, act2) => renderSegments(leg, distanceToNext)
+              case Other(other) => renderSegments(other, distanceToNext)
               case _ => Nil
             })
         }
@@ -118,6 +141,32 @@ class ShowPlan extends Logger {
 
   }
 
+  def deriveFacilities(segments: List[LabelledSegment]) = {
+    segments.map { segment =>
+      Facility("wurst", segment.segment.locations.head.location)
+    }
+  }
+
+  def label(segments: List[Segment], facilities: List[Facility]) = {
+    val labelledSegments = segments.map { segment =>
+      def distanceToThisSegment(facility: Facility) = calcDistance(facility.location, segment.locations.head.location)
+//      val nearestFacility = facilities match {
+//        case Nil => None
+//        case someFacilities => {
+//
+//          Some(someFacilities.reduceLeft((a,b) => if (distanceToThisSegment(a) <= distanceToThisSegment(b)) a else b))
+//        }
+//      }
+
+      val needsFacility = segment.minutes >= 5
+      val nearestFacility = facilities.find(facility => distanceToThisSegment(facility) <= SNAP_TO_FACILITY)
+      LabelledSegment(segment, needsFacility, nearestFacility)
+    }
+    val labelledFacilities = facilities.map { facility =>
+      LabelledFacility(facility)
+    }
+    (labelledSegments, labelledFacilities)
+  }
 
   def makeLeg(act1: JsObj, act2: JsObj): JsObj = {
     JsObj(("start", act1), ("end", act2))
@@ -162,10 +211,10 @@ class ShowPlan extends Logger {
 
 
   def makeLeg(leg: ShowPlan.this.type#Leg): JsObj = {
-    val distance = calcDistance(leg.activity1.head.location, leg.activity2.head.location)
+    val distance = calcDistance(leg.activity1.segment.locations.head.location, leg.activity2.segment.locations.head.location)
     val duration = new Duration(new DateTime(leg.startTime), new DateTime(leg.endTime)).getStandardSeconds
     JsObj(("points", JsArray(List(leg.activity1, leg.activity2).map {
-      locs => JsObj(("lat", locs.head.location.lat), ("lng", locs.head.location.long))
+      labelledSegment => JsObj(("lat", labelledSegment.segment.locations.head.location.lat), ("lng", labelledSegment.segment.locations.head.location.long))
     })), ("title",
       new DateTime(leg.startTime).toString("HH:mm") + "-" + new DateTime(leg.endTime).toString("HH:mm") + " "
         + (distance/1000).formatted("%.2f")+"km" + " "
@@ -178,10 +227,18 @@ class ShowPlan extends Logger {
       ("lng", activity.location.long.toString))
   }
 
+  def segment(locations: List[Location]): Segmentation = {
+    val locationAndNext = locations.zip(locations.tail)
+    val locationAndDistance = locationAndNext.map( p => (p._1, calcDistance(p._1.location,p._2.location)))
+    val locationAndDistanceMap = Map() ++ locationAndDistance
+    val segments = segmentLocations(locations).map(Segment.toSegment(_))
+    Segmentation(segments, locationAndDistanceMap)
+  }
+
   def segmentLocations(locations: List[Location]): List[List[Location]] = {
     locations match {
       case head :: tail => {
-        val (cluster, rest) = (head :: tail).span(location => (calcDistance(head.location, location.location) <= 70.0))
+        val (cluster, rest) = (head :: tail).span(location => (calcDistance(head.location, location.location) <= SMALL))
         cluster :: segmentLocations(rest)
       }
       case Nil => Nil
@@ -197,27 +254,28 @@ class ShowPlan extends Logger {
     scala.math.sqrt(dx*dx + dy*dy)
   }
 
-
-  def isSignificant(segment: Segment) = {
-    segment.isSignificant
-  }
-
   object LegActivityTail {
-    def unapply(xs: List[List[Location]]) = {
-      val (leg, rest) = xs.span(!isSignificant(_))
+    def unapply(xs: List[LabelledSegment]) = {
+      val (leg, rest) = xs.span(_.facility.isEmpty)
       rest match {
-        case act :: tail if isSignificant(act)  => Some(leg,act,tail)
+        case act :: tail if act.facility.isDefined  => Some(leg,act,tail)
         case _ => None
       }
     }
   }
 
-  def toPlanElements(xs: List[List[Location]]): List[PlanElement] = {
+  def toPlanElements(labelling: Labelling): List[PlanElement] = {
+    val xs: List[LabelledSegment] = labelling._1
+    toPlanElements(xs)
+  }
+
+  def toPlanElements(segments: List[LabelledSegment]): List[PlanElement] = {
+    val xs = segments
     xs match {
-      case act1 :: LegActivityTail(leg, act2, tail) if isSignificant(act1) => {
+      case act1 :: LegActivityTail(leg, act2, tail) if act1.facility.isDefined => {
         Activity(act1) :: Leg(act1, leg, act2) :: toPlanElements(act2 :: tail)
       }
-      case act :: tailWithoutAnotherActivity if isSignificant(act) => {
+      case act :: tailWithoutAnotherActivity if act.facility.isDefined => {
         Activity(act) :: toPlanElements(tailWithoutAnotherActivity)
       }
       case head::LegActivityTail(tailleg, act, tail) => {

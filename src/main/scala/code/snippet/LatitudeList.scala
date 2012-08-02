@@ -27,10 +27,11 @@ object LatitudeList extends Logger {
   def render = S.param("date") match {
     case Full(dateParam) => {
       val date = theDateFormat.parse(dateParam)
+      val locations = Location.findByDay(date)
       "li *" #> {
-        val locations = Location.findByDay(date)
         (locations sortBy (_.timestamp.getTime)).map(_.toString)
       } &
+        "#num *" #> Text(locations.size.toString) &
         "#from_date *" #> Text(date.toString) &
         "#to_date *" #> Text(new Date(date.getTime + 24 * 60 * 60 * 1000).toString)
     }
