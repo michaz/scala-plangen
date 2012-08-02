@@ -14,6 +14,7 @@ import net.liftweb.http.js.{JsExp, JE, JsCmd, JsObj}
 import net.liftweb.http.js.JE.{JsRaw, JsArray, JsObj}
 import net.liftweb.http.js.JsCmds.{OnLoad, Script, JsCrVar}
 import java.util.Date
+import collection.immutable.IndexedSeq
 
 
 /**
@@ -66,18 +67,18 @@ class ShowPlan extends Logger {
     def minutes = new Duration(new DateTime(startTime), new DateTime(endTime)).getStandardMinutes
   }
 
-  case class Activity(activity: LabelledSegment) extends PlanElement {
+  case class Activity(_segments: List[LabelledSegment]) extends PlanElement {
     override def toString = "Act (" + startTime + "," + endTime + ") @ " + location
-    override def startTime = activity.segment.locations.head.timestamp
-    override def endTime = activity.segment.locations.last.timestamp
-    def location = activity.segment.locations.head.location
-    override def segments = activity.segment :: Nil
+    override def startTime = _segments.head.segment.locations.head.timestamp
+    override def endTime = _segments.last.segment.locations.last.timestamp
+    def location = _segments.head.segment.locations.head.location
+    override def segments = _segments.map(_.segment)
   }
 
-  case class Leg(activity1: LabelledSegment, leg: List[LabelledSegment], activity2: LabelledSegment) extends PlanElement {
-    override def toString = "Leg (" + startTime + "," + endTime + "): (" + activity1.segment.locations.last.location + "," + activity2.segment.locations.head.location
-    override def startTime = activity1.segment.locations.last.timestamp
-    override def endTime = activity2.segment.locations.head.timestamp
+  case class Leg(activity1: List[LabelledSegment], leg: List[LabelledSegment], activity2: List[LabelledSegment]) extends PlanElement {
+    override def toString = "Leg (" + startTime + "," + endTime + "): (" + activity1.last.segment.locations.last.location + "," + activity2.head.segment.locations.head.location
+    override def startTime = activity1.last.segment.locations.last.timestamp
+    override def endTime = activity2.head.segment.locations.head.timestamp
     override def segments = leg.map(_.segment)
   }
 
@@ -93,7 +94,7 @@ class ShowPlan extends Logger {
   val COORDINATE_SYSTEM = TransformationFactory.DHDN_GK4
   val t = TransformationFactory.getCoordinateTransformation("WGS84", COORDINATE_SYSTEM)
 
-  var actsAndLegs: List[PlanElement] = Nil
+  var actsAndLegs: Seq[PlanElement] = Nil
 
   def render = {
 
@@ -127,7 +128,7 @@ class ShowPlan extends Logger {
         "#planList *" #> actsAndLegs.map { planElement =>
           "#planElementText *" #> planElement.toString &
             "#segmentList *" #> (planElement match {
-              case Activity(segment) => renderSegments(segment :: Nil, distanceToNext)
+              case Activity(segments) => renderSegments(segments, distanceToNext)
               case Leg(act1, leg, act2) => renderSegments(leg, distanceToNext)
               case Other(other) => renderSegments(other, distanceToNext)
               case _ => Nil
@@ -192,7 +193,7 @@ class ShowPlan extends Logger {
       }))) & JsRaw("drawChart(data)").cmd
   }
 
-  def renderGoogleMap = renderLocations(actsAndLegs)
+  def renderGoogleMap = renderLocations(actsAndLegs.toList)
 
   def renderLocations(planElements: List[PlanElement]): NodeSeq = {
 
@@ -211,10 +212,10 @@ class ShowPlan extends Logger {
 
 
   def makeLeg(leg: ShowPlan.this.type#Leg): JsObj = {
-    val distance = calcDistance(leg.activity1.segment.locations.head.location, leg.activity2.segment.locations.head.location)
+    val distance = calcDistance(leg.activity1.head.segment.locations.head.location, leg.activity2.last.segment.locations.head.location)
     val duration = new Duration(new DateTime(leg.startTime), new DateTime(leg.endTime)).getStandardSeconds
     JsObj(("points", JsArray(List(leg.activity1, leg.activity2).map {
-      labelledSegment => JsObj(("lat", labelledSegment.segment.locations.head.location.lat), ("lng", labelledSegment.segment.locations.head.location.long))
+      labelledSegment => JsObj(("lat", labelledSegment.head.segment.locations.head.location.lat), ("lng", labelledSegment.head.segment.locations.head.location.long))
     })), ("title",
       new DateTime(leg.startTime).toString("HH:mm") + "-" + new DateTime(leg.endTime).toString("HH:mm") + " "
         + (distance/1000).formatted("%.2f")+"km" + " "
@@ -264,30 +265,96 @@ class ShowPlan extends Logger {
     }
   }
 
-  def toPlanElements(labelling: Labelling): List[PlanElement] = {
-    val xs: List[LabelledSegment] = labelling._1
-    toPlanElements(xs)
-  }
+//  def toPlanElements(labelling: Labelling): List[PlanElement] = {
+//    val xs: List[LabelledSegment] = labelling._1
+//    toPlanElements(xs)
+//  }
+//
+//  def toPlanElements(segments: List[LabelledSegment]): List[PlanElement] = {
+//    val xs = segments
+//    xs match {
+//      case act1 :: LegActivityTail(leg, act2, tail) if act1.facility.isDefined => {
+//        Activity(act1 :: Nil) :: Leg(act1, leg, act2) :: toPlanElements(act2 :: tail)
+//      }
+//      case act :: tailWithoutAnotherActivity if act.facility.isDefined => {
+//        Activity(act :: Nil) :: toPlanElements(tailWithoutAnotherActivity)
+//      }
+//      case head::LegActivityTail(tailleg, act, tail) => {
+//        Other(head::tailleg) :: toPlanElements(act :: tail)
+//      }
+//      case Nil => Nil
+//      case onlyInsignificantStuff => {
+//        Other(onlyInsignificantStuff) :: Nil
+//      }
+//    }
+//  }
+//
+//  def toPlanElements(labelling: Labelling): List[PlanElement] = {
+//    val segments = labelling._1
+//    case class State(planSoFar: List[T], currentFacility: Option[Facility], currentStuff: List[Segment])
+//    trait T{}
+//    case class ActivityT(facility: Facility, segments: List[Segment]) extends T
+//    case class LegT(segments: List[Segment]) extends T
+//    val finalState = segments.foldLeft(State(Nil, None, Nil)) { (state, segment) =>
+//      state.currentFacility match {
+//        case Some(facility) => if (segment.facility == facility)
+//          State(state.planSoFar, facility, segment :: state.currentStuff)
+//          else
+//          State(state.planSoFar + ActivityT(facility, state.currentStuff.reverse), segment.facility, segment :: Nil)
+//        case None => if (segment.facility == None)
+//          State(state.planSoFar, None, segment :: state.currentStuff)
+//          else
+//          State(state.planSoFar + LegT(state.currentStuff.reverse), segment.facility, segment :: Nil)
+//      }
+//    }
+//    val plan = finalState.currentFacility match {
+//      case Some(facility) => finalState.planSoFar + ActivityT(facility, finalState.currentStuff)
+//      case None => finalState.planSoFar + LegT(finalState.currentStuff)
+//    }
+//
+//    case class State2(lastActivity: Option[Activity], currentLeg: Option[LegT])
+//    plan.foldLeft(State2(None, None)) { (state, planElement) =>
+//
+//
+//    }
+//
+//  }
 
-  def toPlanElements(segments: List[LabelledSegment]): List[PlanElement] = {
-    val xs = segments
-    xs match {
-      case act1 :: LegActivityTail(leg, act2, tail) if act1.facility.isDefined => {
-        Activity(act1) :: Leg(act1, leg, act2) :: toPlanElements(act2 :: tail)
-      }
-      case act :: tailWithoutAnotherActivity if act.facility.isDefined => {
-        Activity(act) :: toPlanElements(tailWithoutAnotherActivity)
-      }
-      case head::LegActivityTail(tailleg, act, tail) => {
-        Other(head::tailleg) :: toPlanElements(act :: tail)
-      }
-      case Nil => Nil
-      case onlyInsignificantStuff => {
-        Other(onlyInsignificantStuff) :: Nil
+  def toPlanElements(labelling: Labelling) = {
+    val segments = labelling._1
+    // group by switch of facility.
+    // danach hab ich aber gemerkt, dass ich leere listen dazwischen haben will, wenn die facility von gesetzt auf
+    // gesetzt wechselt .. total bloed.
+    def groupByFacility(segments: List[LabelledSegment]) : List[List[LabelledSegment]] = {
+      segments match {
+        case Nil => Nil
+        case firstSegment :: rest => {
+          val (onSamePlanElement, onOtherPlanElements) = (firstSegment :: rest).span(segment => segment.facility == firstSegment.facility)
+          onOtherPlanElements match {
+            case next :: _ if firstSegment.facility != None && next.facility != None => onSamePlanElement :: Nil :: groupByFacility(onOtherPlanElements)
+            case _ => onSamePlanElement :: groupByFacility(onOtherPlanElements)
+          }
+
+        }
       }
     }
+
+    val groupedSegments = groupByFacility(segments)
+    // hier die leeren listen wieder rausfischen. das muss besser gehn
+    mySliding(groupedSegments).map { window => window match {
+      case List(List(), List(dis), _) => (if (dis.head.facility == None) Other(dis) else Activity(dis)) : PlanElement
+      case List(List(prev), List(dis), List(next)) => (if (dis.isEmpty || dis.head.facility == None) Leg(prev, dis, next) else Activity(dis)): PlanElement
+      case List(List(prev), List(dis), List()) => (if (dis.head.facility == None) Other(dis) else Activity(dis)): PlanElement
+    }
+
+
+    }
+
   }
 
+  def mySliding[T](lst: List[T]) = {
+    (0 until lst.length).map(i => List(lst.slice(i - 1,i), List(lst(i)), lst.slice(i + 1, i + 2) ))
+  }  // "This is a Zipper. Look at scalaz".
 
   def getCoord(location: LatLong) = {
     val LatLong(lat, long) = location
