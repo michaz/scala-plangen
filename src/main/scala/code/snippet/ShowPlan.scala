@@ -15,11 +15,18 @@ import net.liftweb.http.js.JsCmds.{OnLoad, Script, JsCrVar}
 import java.util.Date
 import util.Clusterer
 import collection.JavaConverters._
+import net.liftweb.json.JsonAST.{JNothing}
 
 
 trait Segment {
   def minutes: Long
   def locations: List[Location]
+  def containsCheckin = {
+    locations.exists(location => {
+      val checkin = location.raw \ "activityId"
+      checkin != JNothing
+    })
+  }
 }
 
 case class Facility(name: String, location: LatLong)
@@ -167,7 +174,7 @@ class ShowPlan extends Logger {
     val labelledSegments = segments.map { segment =>
       def distanceToThisSegment(facility: Facility) = LatLong.calcDistance(facility.location, segment.locations.head.location)
 
-      val needsFacility = segment.minutes >= 5
+      val needsFacility = segment.minutes >= 5 || segment.containsCheckin
       val nearestFacility = facilities match {
         case Nil => None
         case someFacilities => {
