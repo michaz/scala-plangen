@@ -11,7 +11,7 @@
 	<name>lift_test Project</name>
 	<inceptionYear>2010</inceptionYear>
 	<properties>
-		<scala.version>2.8.1</scala.version>
+		<scala.version>2.9.1</scala.version>
 		<!-- Common plugin settings -->
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>${project.build.sourceEncoding}</project.reporting.outputEncoding>
@@ -25,7 +25,7 @@
 		<repository>
 			<id>scala-tools.releases</id>
 			<name>Scala-Tools Dependencies Repository for Releases</name>
-			<url>http://scala-tools.org/repo-releases</url>
+			<url>https://oss.sonatype.org/content/groups/scala-tools/</url>
 		</repository>
 		<repository>
 			<id>google-api-services</id>
@@ -37,7 +37,7 @@
 		<pluginRepository>
 			<id>scala-tools.releases</id>
 			<name>Scala-Tools Plugins Repository for Releases</name>
-			<url>http://scala-tools.org/repo-releases</url>
+			<url>https://oss.sonatype.org/content/groups/scala-tools/</url>
 		</pluginRepository>
 	</pluginRepositories>
 
@@ -57,12 +57,6 @@
 			<groupId>junit</groupId>
 			<artifactId>junit</artifactId>
 			<version>4.7</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.scala-tools.testing</groupId>
-			<artifactId>specs_2.8.1</artifactId>
-			<version>1.6.6</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -90,28 +84,39 @@
         </dependency>
         <dependency>
             <groupId>net.liftweb</groupId>
-            <artifactId>lift-webkit_2.8.1</artifactId>
+            <artifactId>lift-webkit_2.9.1</artifactId>
             <version>2.4</version>
         </dependency>
 		<dependency>
 			<groupId>net.liftweb</groupId>
-			<artifactId>lift-mongodb_2.8.1</artifactId>
+			<artifactId>lift-mongodb_2.9.1</artifactId>
 			<version>2.4</version>
 		</dependency>
         <dependency>
             <groupId>net.liftweb</groupId>
-            <artifactId>lift-json_2.8.1</artifactId>
+            <artifactId>lift-json_2.9.1</artifactId>
             <version>2.4</version>
         </dependency>
         <dependency>
-            <groupId>org.matsim.contrib</groupId>
-            <artifactId>latitude-plan-generator</artifactId>
-            <version>1.1.0</version>
+            <groupId>joda-time</groupId>
+            <artifactId>joda-time</artifactId>
+            <version>2.1</version>
         </dependency>
         <dependency>  <!-- To fix joda-time dependency problem -->
             <groupId>org.joda</groupId>
             <artifactId>joda-convert</artifactId>
             <version>1.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.matsim</groupId>
+            <artifactId>matsim</artifactId>
+            <version>0.5.0-SNAPSHOT</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.sf.jgrapht</groupId>
+            <artifactId>jgrapht-core</artifactId>
+            <version>0.8.3-SNAPSHOT</version>
         </dependency>
 	</dependencies>
 
