@@ -15,6 +15,7 @@ import java.util.Date
 import util.Clusterer
 import collection.JavaConverters._
 import net.liftweb.json.JsonAST.{JNothing}
+import util.Clusterer.ThingToCluster
 
 
 trait Segment {
@@ -30,7 +31,10 @@ trait Segment {
 
 case class Facility(name: String, location: LatLong)
 
-case class LabelledSegment(segment: Segment, needsFacility: Boolean, facility: Option[Facility])
+case class LabelledSegment(segment: Segment, needsFacility: Boolean, facility: Option[Facility]) extends ThingToCluster {
+  def getLat = segment.locations.head.location.lat
+  def getLong = segment.locations.head.location.long
+}
 
 /**
  * A snippet transforms input to output... it transforms

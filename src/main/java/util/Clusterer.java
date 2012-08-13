@@ -1,7 +1,6 @@
 package util;
 
-import code.snippet.LabelledSegment;
-import data.mongo.LatLong;
+import org.geotools.referencing.GeodeticCalculator;
 import org.jgrapht.Graphs;
 import org.jgrapht.UndirectedGraph;
 import org.jgrapht.alg.ConnectivityInspector;
@@ -22,24 +21,36 @@ import java.util.Set;
  */
 public class Clusterer {
 
-    public static List<Set<LabelledSegment>> findSignificantLocations(List<LabelledSegment> segments) {
+    public interface ThingToCluster {
+        double getLat();
+        double getLong();
+    }
+
+    static double calcDistance(double lat1, double long1, double lat2, double long2) {
+        GeodeticCalculator gc = new GeodeticCalculator();
+        gc.setStartingGeographicPoint(lat1, long1);
+        gc.setDestinationGeographicPoint(lat2, long2);
+        return gc.getOrthodromicDistance();
+    }
+
+    public static <A extends ThingToCluster> List<Set<A>> findSignificantLocations(List<A> segments) {
 
 
         // Idiotische Art, in quadratischer Zeit den euklidischen MST zu berechnen.
         // Das natürlich beizeiten durch O(nlogn)-Algorithmus ersetzen.
-        UndirectedGraph<LabelledSegment, DefaultWeightedEdge> g;
-        g = new SimpleWeightedGraph<LabelledSegment, DefaultWeightedEdge>(DefaultWeightedEdge.class);
-        for (LabelledSegment segment : segments) {
+        UndirectedGraph<A, DefaultWeightedEdge> g;
+        g = new SimpleWeightedGraph<A, DefaultWeightedEdge>(DefaultWeightedEdge.class);
+        for (A segment : segments) {
             g.addVertex(segment);
         }
         for (int i=0; i < segments.size(); ++i) {
             for (int j=i+1; j< segments.size(); ++j) {
-                LabelledSegment v1 = segments.get(i);
-                LabelledSegment v2 = segments.get(j);
-                Graphs.addEdge(g, v1, v2, LatLong.calcDistance(v1.segment().locations().head().location(), v2.segment().locations().head().location()));
+                A v1 = segments.get(i);
+                A v2 = segments.get(j);
+                Graphs.addEdge(g, v1, v2, calcDistance(v1.getLat(), v1.getLong(), v2.getLat(), v2.getLong()));
             }
         }
-        KruskalMinimumSpanningTree<LabelledSegment, DefaultWeightedEdge> mst = new KruskalMinimumSpanningTree<LabelledSegment, DefaultWeightedEdge>(g);
+        KruskalMinimumSpanningTree<A, DefaultWeightedEdge> mst = new KruskalMinimumSpanningTree<A, DefaultWeightedEdge>(g);
 
         Set<DefaultWeightedEdge> edges = mst.getEdgeSet();
         System.out.println("Weights:");
@@ -54,9 +65,9 @@ public class Clusterer {
             }
         }
 
-        UndirectedSubgraph<LabelledSegment, DefaultWeightedEdge> subgraph = new UndirectedSubgraph<LabelledSegment, DefaultWeightedEdge>(g, g.vertexSet(), shortEdges);
-        ConnectivityInspector<LabelledSegment, DefaultWeightedEdge> connectivityInspector = new ConnectivityInspector<LabelledSegment, DefaultWeightedEdge>(subgraph);
-        List<Set<LabelledSegment>> clusters = connectivityInspector.connectedSets();
+        UndirectedSubgraph<A, DefaultWeightedEdge> subgraph = new UndirectedSubgraph<A, DefaultWeightedEdge>(g, g.vertexSet(), shortEdges);
+        ConnectivityInspector<A, DefaultWeightedEdge> connectivityInspector = new ConnectivityInspector<A, DefaultWeightedEdge>(subgraph);
+        List<Set<A>> clusters = connectivityInspector.connectedSets();
 
 
         return clusters;
