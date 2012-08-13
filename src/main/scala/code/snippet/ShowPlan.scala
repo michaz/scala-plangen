@@ -12,29 +12,8 @@ import net.liftweb.http.js.{JsExp, JE, JsCmd, JsObj}
 import net.liftweb.http.js.JE.{JsRaw, JsArray, JsObj}
 import net.liftweb.http.js.JsCmds.{OnLoad, Script, JsCrVar}
 import java.util.Date
-import util.Clusterer
-import collection.JavaConverters._
-import net.liftweb.json.JsonAST.{JNothing}
-import util.Clusterer.ThingToCluster
-
-
-trait Segment {
-  def minutes: Long
-  def locations: List[Location]
-  def containsCheckin = {
-    locations.exists(location => {
-      val checkin = location.raw \ "activityId"
-      checkin != JNothing
-    })
-  }
-}
-
-case class Facility(name: String, location: LatLong)
-
-case class LabelledSegment(segment: Segment, needsFacility: Boolean, facility: Option[Facility]) extends ThingToCluster {
-  def getLat = segment.locations.head.location.lat
-  def getLong = segment.locations.head.location.long
-}
+import algorithm.Labeller._
+import algorithm.Labeller
 
 /**
  * A snippet transforms input to output... it transforms
@@ -47,30 +26,6 @@ case class LabelledSegment(segment: Segment, needsFacility: Boolean, facility: O
  * no explicit state managed in the snippet.
  */
 class ShowPlan extends Logger {
-
-  val SMALL = 50.0
-  val SNAP_TO_FACILITY = 200.0
-
-
-  case class LabelledFacility(facility: Facility)
-
-  case class Segmentation(segments: List[Segment], distanceToNext: Map[Location, Double])
-
-  type Labelling = (List[LabelledSegment], List[LabelledFacility])
-
-
-
-  object Segment {
-    implicit def toSegment(_locations: List[Location]) = new Segment {
-      override def minutes = {
-        val startTime = locations.head.timestamp
-        val endTime = locations.last.timestamp
-        val minutes = new Duration(new DateTime(startTime), new DateTime(endTime)).getStandardMinutes
-        minutes
-      }
-      override def locations = _locations
-    }
-  }
 
   abstract class PlanElement {
     def segments: List[Segment]
@@ -121,18 +76,10 @@ class ShowPlan extends Logger {
       case Full(dateParam) => {
         val date = theDateFormat.parse(dateParam)
         val locations = Location.findByDay(date)
-        val Segmentation(segments, distanceToNext) = segment(locations)
 
-        var facilities: List[Facility] = Nil
-        var labelling = label(segments, facilities)
-
-        for (i <- 1 to 1) {
-          facilities = deriveFacilities(labelling._1.filter(_.needsFacility))
-          labelling = label(segments, facilities)
-        }
-
+        val (finalLabelling, distanceToNext) = Labeller.labelLocations(locations)
         // actsAndLegs = toPlanElements(segmentedLocations.map(_.locations))
-        actsAndLegs = toPlanElements(labelling)
+        actsAndLegs = toPlanElements(finalLabelling)
         assert(actsAndLegs.map(planElement => planElement.segments).flatten.map(segment => segment.locations).flatten.size == locations.size)
         "#planList *" #> actsAndLegs.map { planElement =>
           "#planElementText *" #> planElement.toString &
@@ -151,44 +98,7 @@ class ShowPlan extends Logger {
 
   }
 
-  def deriveFacilities(segments: List[LabelledSegment]) = {
-    val clusters = Clusterer.findSignificantLocations(segments.asJava).asScala.toList
-    clusters.map { cluster =>
-      Facility("wurst", average(for (segment<-cluster.asScala.toList; location<-segment.segment.locations) yield location.location))
-    }
 
-    /*segments.map { segment =>
-      Facility("wurst", segment.segment.locations.head.location)
-    } */
-
-  }
-
-  def average(points : Seq[LatLong]): LatLong = {
-    val n = points.size
-    val sum = points.foldLeft((0.0,0.0)) { (p1,p2) => (p1._1+p2.lat, p1._2+p2.long) }
-    LatLong(sum._1 / n, sum._2 / n)
-  }
-
-
-  def label(segments: List[Segment], facilities: List[Facility]) = {
-    val labelledSegments = segments.map { segment =>
-      def distanceToThisSegment(facility: Facility) = LatLong.calcDistance(facility.location, segment.locations.head.location)
-
-      val needsFacility = segment.minutes >= 5 || segment.containsCheckin
-      val nearestFacility = facilities match {
-        case Nil => None
-        case someFacilities => {
-          val nearestFacility = someFacilities.reduceLeft((a,b) => if (distanceToThisSegment(a) <= distanceToThisSegment(b)) a else b)
-          if (distanceToThisSegment(nearestFacility) <= SNAP_TO_FACILITY) Some(nearestFacility) else None
-        }
-      }
-      LabelledSegment(segment, needsFacility, nearestFacility)
-    }
-    val labelledFacilities = facilities.map { facility =>
-      LabelledFacility(facility)
-    }
-    (labelledSegments, labelledFacilities)
-  }
 
   def makeLeg(act1: JsObj, act2: JsObj): JsObj = {
     JsObj(("start", act1), ("end", act2))
@@ -251,23 +161,7 @@ class ShowPlan extends Logger {
     + ((distance / duration) * 3.6 formatted "%.2f"+"km/h")))
   }
 
-  def segment(locations: List[Location]): Segmentation = {
-    val locationAndNext = locations.zip(locations.tail)
-    val locationAndDistance = locationAndNext.map( p => (p._1, LatLong.calcDistance(p._1.location,p._2.location)))
-    val locationAndDistanceMap = Map() ++ locationAndDistance
-    val segments = segmentLocations(locations).map(Segment.toSegment(_))
-    Segmentation(segments, locationAndDistanceMap)
-  }
 
-  def segmentLocations(locations: List[Location]): List[List[Location]] = {
-    locations match {
-      case head :: tail => {
-        val (cluster, rest) = (head :: tail).span(location => (LatLong.calcDistance(head.location, location.location) <= SMALL))
-        cluster :: segmentLocations(rest)
-      }
-      case Nil => Nil
-    }
-  }
 
 
   object LegActivityTail {
@@ -281,7 +175,7 @@ class ShowPlan extends Logger {
   }
 
 
-  def toPlanElements(labelling: Labelling) = {
+  def toPlanElements(labelling: Labeller.Labelling) = {
     val segments = labelling._1
     // group by switch of facility.
     // danach hab ich aber gemerkt, dass ich leere listen dazwischen haben will, wenn die facility von gesetzt auf
