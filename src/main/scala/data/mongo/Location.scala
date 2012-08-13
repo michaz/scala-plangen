@@ -6,37 +6,23 @@ import com.mongodb._
 import net.liftweb.mongodb.BsonDSL._
 
 import scala.collection.JavaConversions._
-import service.User
 import net.liftweb.common.Logger
 import bootstrap.liftweb.CurrentUser
 import net.liftweb.json.JsonAST.{JValue, JObject}
-import org.matsim.core.utils.geometry.CoordImpl
-import org.matsim.core.utils.geometry.transformations.TransformationFactory
+import org.geotools.referencing.GeodeticCalculator
 
 
 case class LatLong(lat: Double, long: Double) {
-
-  def getCoord = {
-    val coord = LatLong.t.transform(new CoordImpl(lat, long))
-    (coord.getX, coord.getY)
-  }
 
 }
 
 object LatLong {
 
-
-  val COORDINATE_SYSTEM = TransformationFactory.DHDN_GK4
-  val t = TransformationFactory.getCoordinateTransformation("WGS84", COORDINATE_SYSTEM)
-
-
   def calcDistance(first: LatLong, second: LatLong) = {
-    val (p1x, p1y) = first.getCoord
-    val (p2x, p2y) = second.getCoord
-    t.transform(new CoordImpl(p1x, p1y))
-    val dx = p1x - p2x
-    val dy = p1y - p2y
-    scala.math.sqrt(dx*dx + dy*dy)
+    val gc = new GeodeticCalculator()
+    gc.setStartingGeographicPoint(first.long, first.lat)
+    gc.setDestinationGeographicPoint(second.long, second.lat)
+    gc.getOrthodromicDistance
   }
 
 

@@ -8,7 +8,6 @@ import xml.{NodeSeq, Text}
 import net.liftweb.http.S
 import data.mongo.{LatLong, Location}
 import org.joda.time.{DateTime, Duration}
-import org.matsim.core.utils.geometry.transformations.TransformationFactory
 import net.liftweb.http.js.{JsExp, JE, JsCmd, JsObj}
 import net.liftweb.http.js.JE.{JsRaw, JsArray, JsObj}
 import net.liftweb.http.js.JsCmds.{OnLoad, Script, JsCrVar}
@@ -99,9 +98,6 @@ class ShowPlan extends Logger {
   }
 
   private[this] def theDateFormat = new SimpleDateFormat("yyyy-MM-dd")
-
-  val COORDINATE_SYSTEM = TransformationFactory.DHDN_GK4
-  val t = TransformationFactory.getCoordinateTransformation("WGS84", COORDINATE_SYSTEM)
 
   var actsAndLegs: Seq[PlanElement] = Nil
 
