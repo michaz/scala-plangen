@@ -19,6 +19,31 @@
 
             <div id="chart_div" style="width: 900px; height: 500px;"></div>
 
+            <table class="lift:ShowPlan.renderTruth" id="truth">
+                <tbody id="contents_tbody">
+                <tr>
+                    <td name="from" style="width: 100px;">fromtime</td>
+                    <td name="to" style="width: 100px;">totime</td>
+                    <td name="tag" style="width: 100px;">totime</td>
+                    <td style="width: 100px;"> <button name="del">x</button></td>
+                </tr>
+                </tbody>
+            </table>
+            <span class="lift:ShowPlan.renderTruthButton">
+            <form class="lift:form.ajax">
+                <table id="truth-form">
+                    <tbody id="truth-form_tbody">
+                    <tr>
+                        <td name="from" style="width: 100px;"><input name="from" /></td>
+                        <td name="to" style="width: 100px;"><input name="to" /></td>
+                        <td name="tag" style="width: 100px;"><input name="tag" /></td>
+                        <td style="width: 100px;"><input type="submit"  /></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </form>
+            </span>
+
             This is the plan for <span id="day">from-date</span>:
             <ul id="planList">
                 <li><span id="planElementText">A plan element</span>

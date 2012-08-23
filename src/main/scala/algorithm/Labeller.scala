@@ -6,6 +6,7 @@ import net.liftweb.json.JsonAST.JNothing
 import util.Clusterer.ThingToCluster
 import util.Clusterer
 import scala.collection.JavaConverters._
+import service.User
 
 /**
  * Created with IntelliJ IDEA.
@@ -72,6 +73,26 @@ object Labeller {
     (finalLabelling, distanceToNext)
   }
 
+  def labelLocationsWithBackground(user: User, locations: List[Location]) = {
+    val backgroundFacilities = computeBackgroundFacilities(user)
+    val Segmentation(segments, distanceToNext) = segment(locations)
+    val labelling = labelWithBackground(segments, backgroundFacilities)
+    (labelling, distanceToNext)
+  }
+
+  def computeBackgroundFacilities(user: User) = {
+    val allLocations = user.findAllLocations
+    val Segmentation(segments, distanceToNext) = segment(allLocations)
+    var facilities: List[Facility] = Nil
+    var labelling = label(segments, facilities)
+    for (i <- 1 to 1) {
+      facilities = deriveFacilities(labelling._1.filter(_.needsFacility))
+      labelling = label(segments, facilities)
+    }
+    labelling._2
+  }
+
+
   def label(segments: List[Segment], facilities: List[Facility]): (List[LabelledSegment], List[LabelledFacility]) = {
     val labelledSegments = segments.map { segment =>
       def distanceToThisSegment(facility: Facility) = LatLong.calcDistance(facility.location, segment.locations.head.location)
@@ -91,6 +112,11 @@ object Labeller {
     }
     (labelledSegments, labelledFacilities)
   }
+
+  def labelWithBackground(segments: List[Segment], backgroundFacilities: List[LabelledFacility]) = {
+    label(segments, backgroundFacilities.map(_.facility))
+  }
+
 
   def segment(locations: List[Location]): Segmentation = {
     val locationAndNext = locations.zip(locations.tail)

@@ -12,6 +12,7 @@ import net.liftweb.json.JsonAST.{JValue, JObject}
 import org.geotools.referencing.GeodeticCalculator
 
 
+
 case class LatLong(lat: Double, long: Double) {
 
 }

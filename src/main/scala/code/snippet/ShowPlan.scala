@@ -5,8 +5,10 @@ import Helpers._
 import net.liftweb.common.{Full, Logger}
 import java.text.SimpleDateFormat
 import xml.{NodeSeq, Text}
-import net.liftweb.http.S
+import net.liftweb.http._
 import data.mongo.{LatLong, Location}
+import js.JE.JsRaw
+import js.JsCmds.JsCrVar
 import org.joda.time.{DateTime, Duration}
 import net.liftweb.http.js.{JsExp, JE, JsCmd, JsObj}
 import net.liftweb.http.js.JE.{JsRaw, JsArray, JsObj}
@@ -14,6 +16,15 @@ import net.liftweb.http.js.JsCmds.{OnLoad, Script, JsCrVar}
 import java.util.Date
 import algorithm.Labeller._
 import algorithm.Labeller
+import bootstrap.liftweb.CurrentUser
+import net.liftweb.http.js.jquery.JqWiringSupport
+import net.liftweb.util
+import org.apache.commons.logging.impl.NoOpLog
+import scala.Some
+import algorithm.Labeller.LabelledSegment
+import xml.Text
+import code.snippet.TruthItem
+import net.liftweb.common.Full
 
 /**
  * A snippet transforms input to output... it transforms
@@ -25,6 +36,26 @@ import algorithm.Labeller
  * objects, singletons.  Singletons are useful if there's
  * no explicit state managed in the snippet.
  */
+object TheTruth extends SessionVar[Truth](new Truth())
+
+class Truth {
+
+  val contents = ValueCell[Vector[TruthItem]](Vector())
+
+  def addItem(item: TruthItem) {
+    contents.atomicUpdate(v => v :+ item)
+  }
+
+  def removeItem(item: TruthItem) {
+    contents.atomicUpdate(v => v.filterNot(_ == item))
+  }
+
+}
+
+case class TruthItem(from: Date, to: Date, tag: String) {
+  def id = from.getTime()+"_"+to.getTime()+"_"+tag
+}
+
 class ShowPlan extends Logger {
 
   abstract class PlanElement {
@@ -58,6 +89,10 @@ class ShowPlan extends Logger {
 
   private[this] def theDateFormat = new SimpleDateFormat("yyyy-MM-dd")
 
+  val theTruth = TheTruth.get // Resolve SessionVar. If I access the RequestVar directly from the AJAX callbacks,
+  // they are not restored. Perhaps Lift bug #980 ? But this way I think it is a correct workaround - all the callbacks
+  // close around the same object. Perhaps I wouldn't even need a RequestVar.
+
   var actsAndLegs: Seq[PlanElement] = Nil
 
   def render = {
@@ -77,8 +112,10 @@ class ShowPlan extends Logger {
         val date = theDateFormat.parse(dateParam)
         val locations = Location.findByDay(date)
 
-        val (finalLabelling, distanceToNext) = Labeller.labelLocations(locations)
-        // actsAndLegs = toPlanElements(segmentedLocations.map(_.locations))
+        // val (finalLabelling, distanceToNext) = Labeller.labelLocations(locations)
+
+        val (finalLabelling, distanceToNext) = Labeller.labelLocationsWithBackground(CurrentUser.is.openTheBox, locations)
+
         actsAndLegs = toPlanElements(finalLabelling)
         assert(actsAndLegs.map(planElement => planElement.segments).flatten.map(segment => segment.locations).flatten.size == locations.size)
         "#planList *" #> actsAndLegs.map { planElement =>
@@ -149,6 +186,50 @@ class ShowPlan extends Logger {
     </head>)
   }
 
+  def renderTruth = {
+    "tbody" #> (
+
+      util.Helpers.findOrCreateId(id =>  // make sure tbody has an id
+      // when the cart contents updates
+        WiringUI.history(theTruth.contents) {
+          (old, nw, ns) => {
+            // capture the tr part of the template
+            val theTR = ("tr ^^" #> "**")(ns)
+            def ciToId(ci: TruthItem): String = ci.id
+
+            // build a row out of a cart item
+            def html(ci: TruthItem): NodeSeq = {
+              ("tr [id]" #> ciToId(ci) &
+                "@from *" #> Text(ci.from.toString) &
+                "@to *" #> Text(ci.to.toString) &
+                "@tag *" #> Text(ci.tag) &
+                "@del [onclick]" #> SHtml.
+                  ajaxInvoke(() => {
+                  theTruth.removeItem(ci)
+                }))(theTR)
+            }
+
+            // calculate the delta between the lists and
+            // based on the deltas, emit the current jQuery
+            // stuff to update the display
+            JqWiringSupport.calculateDeltas(old, nw, id)(ciToId _, html _)
+          }
+        })
+      )
+  }
+
+  def renderTruthButton = {
+    var from = theDateFormat.format(new Date())
+    var to = theDateFormat.format(new Date())
+    var tag = "c"
+      // "@from" #> SHtml.text(theDateFormat.format(date), content => JsCmds.RedirectTo(MyBoot.googleUrl(("/google_map/" + content))))
+    "@from *" #> SHtml.text(from, content => from = content) &
+    "@to *" #> SHtml.text(to, content => to = content)  &
+    "@tag *" #> SHtml.text(tag, content => {
+      tag = content
+      theTruth.addItem(TruthItem(theDateFormat.parse(from), theDateFormat.parse(to), tag))
+    })
+  }
 
   def makeLeg(leg: ShowPlan.this.type#Leg): JsObj = {
     val distance = LatLong.calcDistance(leg.activity1.head.segment.locations.head.location, leg.activity2.last.segment.locations.head.location)
