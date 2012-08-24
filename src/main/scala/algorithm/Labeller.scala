@@ -25,7 +25,9 @@ object Labeller {
 
   type Labelling = (List[LabelledSegment], List[LabelledFacility])
 
-  case class LabelledSegment(segment: Segment, needsFacility: Boolean, facility: Option[Facility]) extends ThingToCluster {
+  case class SegmentWithFacility(segment: LabelledSegment, facility: Option[Facility])
+
+  case class LabelledSegment(segment: Segment, isActivity: Boolean) extends ThingToCluster {
     def getLat = segment.locations.head.location.lat
     def getLong = segment.locations.head.location.long
   }
@@ -33,6 +35,8 @@ object Labeller {
   case class Facility(name: String, location: LatLong)
 
   trait Segment {
+    def startTime = locations.head.timestamp
+    def endTime = locations.last.timestamp
     def minutes: Long
     def locations: List[Location]
     def containsCheckin = {
@@ -46,8 +50,6 @@ object Labeller {
   object Segment {
     implicit def toSegment(_locations: List[Location]) = new Segment {
       override def minutes = {
-        val startTime = locations.head.timestamp
-        val endTime = locations.last.timestamp
         val minutes = new Duration(new DateTime(startTime), new DateTime(endTime)).getStandardMinutes
         minutes
       }
@@ -65,19 +67,12 @@ object Labeller {
     var labelling = label(segments, facilities)
 
     for (i <- 1 to 1) {
-      facilities = deriveFacilities(labelling._1.filter(_.needsFacility))
+      facilities = deriveFacilities(labelling._1.filter(_.isActivity))
       labelling = label(segments, facilities)
     }
 
     val finalLabelling = labelling
     (finalLabelling, distanceToNext)
-  }
-
-  def labelLocationsWithBackground(user: User, locations: List[Location]) = {
-    val backgroundFacilities = computeBackgroundFacilities(user)
-    val Segmentation(segments, distanceToNext) = segment(locations)
-    val labelling = labelWithBackground(segments, backgroundFacilities)
-    (labelling, distanceToNext)
   }
 
   def computeBackgroundFacilities(user: User) = {
@@ -86,7 +81,7 @@ object Labeller {
     var facilities: List[Facility] = Nil
     var labelling = label(segments, facilities)
     for (i <- 1 to 1) {
-      facilities = deriveFacilities(labelling._1.filter(_.needsFacility))
+      facilities = deriveFacilities(labelling._1.filter(_.isActivity))
       labelling = label(segments, facilities)
     }
     labelling._2
@@ -95,22 +90,27 @@ object Labeller {
 
   def label(segments: List[Segment], facilities: List[Facility]): (List[LabelledSegment], List[LabelledFacility]) = {
     val labelledSegments = segments.map { segment =>
-      def distanceToThisSegment(facility: Facility) = LatLong.calcDistance(facility.location, segment.locations.head.location)
-
-      val needsFacility = segment.minutes >= DURATION_OF_SIGNIFICANT_ACTIVITY || segment.containsCheckin
-      val nearestFacility = facilities match {
-        case Nil => None
-        case someFacilities => {
-          val nearestFacility = someFacilities.reduceLeft((a,b) => if (distanceToThisSegment(a) <= distanceToThisSegment(b)) a else b)
-          if (distanceToThisSegment(nearestFacility) <= SNAP_TO_FACILITY) Some(nearestFacility) else None
-        }
-      }
-      LabelledSegment(segment, needsFacility, nearestFacility)
+      val nearestFacility: Option[Labeller.Facility] = findNearFacility(segment, facilities)
+      val isActivity = segment.minutes >= DURATION_OF_SIGNIFICANT_ACTIVITY || segment.containsCheckin
+      LabelledSegment(segment, isActivity)
     }
     val labelledFacilities = facilities.map { facility =>
       LabelledFacility(facility)
     }
     (labelledSegments, labelledFacilities)
+  }
+
+
+  def findNearFacility(segment: Labeller.Segment, facilities: scala.List[Labeller.Facility]): Option[Labeller.Facility] = {
+    def distanceToThisSegment(facility: Facility) = LatLong.calcDistance(facility.location, segment.locations.head.location)
+    val nearestFacility = facilities match {
+      case Nil => None
+      case someFacilities => {
+        val nearestFacility = someFacilities.reduceLeft((a, b) => if (distanceToThisSegment(a) <= distanceToThisSegment(b)) a else b)
+        if (distanceToThisSegment(nearestFacility) <= SNAP_TO_FACILITY) Some(nearestFacility) else None
+      }
+    }
+    nearestFacility
   }
 
   def labelWithBackground(segments: List[Segment], backgroundFacilities: List[LabelledFacility]) = {

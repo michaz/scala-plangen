@@ -7,24 +7,21 @@ import java.text.SimpleDateFormat
 import xml.{NodeSeq, Text}
 import net.liftweb.http._
 import data.mongo.{LatLong, Location}
-import js.JE.JsRaw
-import js.JsCmds.JsCrVar
-import org.joda.time.{DateTime, Duration}
+import org.joda.time.{Interval, DateTime, Duration}
 import net.liftweb.http.js.{JsExp, JE, JsCmd, JsObj}
 import net.liftweb.http.js.JE.{JsRaw, JsArray, JsObj}
 import net.liftweb.http.js.JsCmds.{OnLoad, Script, JsCrVar}
-import java.util.Date
+import java.util.{Locale, Date}
 import algorithm.Labeller._
 import algorithm.Labeller
 import bootstrap.liftweb.CurrentUser
 import net.liftweb.http.js.jquery.JqWiringSupport
 import net.liftweb.util
-import org.apache.commons.logging.impl.NoOpLog
 import scala.Some
 import algorithm.Labeller.LabelledSegment
 import xml.Text
-import code.snippet.TruthItem
 import net.liftweb.common.Full
+import org.joda.time.format.DateTimeFormat
 
 /**
  * A snippet transforms input to output... it transforms
@@ -65,29 +62,30 @@ class ShowPlan extends Logger {
     def minutes = new Duration(new DateTime(startTime), new DateTime(endTime)).getStandardMinutes
   }
 
-  case class Activity(_segments: List[LabelledSegment]) extends PlanElement {
+  case class Activity(_segments: List[SegmentWithFacility]) extends PlanElement {
     override def toString = "Act (" + startTime + "," + endTime + ") @ " + location
-    override def startTime = _segments.head.segment.locations.head.timestamp
-    override def endTime = _segments.last.segment.locations.last.timestamp
+    override def startTime = _segments.head.segment.segment.startTime
+    override def endTime = _segments.last.segment.segment.endTime
     def location = _segments.head.facility.get.location
-    override def segments = _segments.map(_.segment)
+    override def segments = _segments.map(_.segment.segment)
   }
 
-  case class Leg(activity1: List[LabelledSegment], leg: List[LabelledSegment], activity2: List[LabelledSegment]) extends PlanElement {
-    override def toString = "Leg (" + startTime + "," + endTime + "): (" + activity1.last.segment.locations.last.location + "," + activity2.head.segment.locations.head.location
-    override def startTime = activity1.last.segment.locations.last.timestamp
-    override def endTime = activity2.head.segment.locations.head.timestamp
-    override def segments = leg.map(_.segment)
+  case class Leg(activity1: List[SegmentWithFacility], leg: List[SegmentWithFacility], activity2: List[SegmentWithFacility]) extends PlanElement {
+    override def toString = "Leg (" + startTime + "," + endTime + "): (" + activity1.last.segment.segment.locations.last.location + "," + activity2.head.segment.segment.locations.head.location
+    override def startTime = activity1.last.segment.segment.endTime
+    override def endTime = activity2.head.segment.segment.startTime
+    override def segments = leg.map(_.segment.segment)
   }
 
-  case class Other(other: List[LabelledSegment]) extends PlanElement {
+  case class Other(other: List[SegmentWithFacility]) extends PlanElement {
     override def toString = segments.size + " other Elements."
-    override def segments = other.map(_.segment)
-    override def startTime = other.head.segment.locations.head.timestamp
-    override def endTime = other.last.segment.locations.last.timestamp
+    override def segments = other.map(_.segment.segment)
+    override def startTime = other.head.segment.segment.startTime
+    override def endTime = other.last.segment.segment.endTime
   }
 
-  private[this] def theDateFormat = new SimpleDateFormat("yyyy-MM-dd")
+  private[this] val theDateFormat = new SimpleDateFormat("yyyy-MM-dd")
+  private[this] val theTimeFormat = DateTimeFormat.mediumTime().withLocale(Locale.GERMANY)
 
   val theTruth = TheTruth.get // Resolve SessionVar. If I access the RequestVar directly from the AJAX callbacks,
   // they are not restored. Perhaps Lift bug #980 ? But this way I think it is a correct workaround - all the callbacks
@@ -95,28 +93,41 @@ class ShowPlan extends Logger {
 
   var actsAndLegs: Seq[PlanElement] = Nil
 
+  var facilities: Seq[Facility] = Nil
+
+  var date: Date = new Date()
+
   def render = {
 
-    def renderSegments(segments: scala.List[LabelledSegment], distanceToNext: Map[Location, Double]): List[CssSel] = {
+    def renderSegments(segments: scala.List[SegmentWithFacility], distanceToNext: Map[Location, Double]): List[CssSel] = {
       segments.map { segment =>
-        "#locationList *" #> segment.segment.locations.map { location =>
+        "#locationList *" #> segment.segment.segment.locations.map { location =>
           "#locationText *" #> Text(location.toString) &
           "#locationDist *" #> distanceToNext.get(location).getOrElse(0.0).toString
-        } & "#segmentText *" #> Text(segment.segment.minutes + " Minuten langes Segment. Signifikant: " + segment.needsFacility + " Hat Facility: "+ segment.facility.isDefined)
+        } & "#segmentText *" #> Text(segment.segment.segment.minutes + " Minuten langes Segment. Signifikant: " + segment.segment.isActivity)
 
       }
     }
 
     S.param("date") match {
       case Full(dateParam) => {
-        val date = theDateFormat.parse(dateParam)
+        date = theDateFormat.parse(dateParam)
         val locations = Location.findByDay(date)
+        val user = CurrentUser.is.openTheBox
+        val backgroundFacilities = computeBackgroundFacilities(user) // later: LOADbackgroundfacilities (and trained network)
 
-        // val (finalLabelling, distanceToNext) = Labeller.labelLocations(locations)
+        val Segmentation(segments, distanceToNext) = segment(locations)
 
-        val (finalLabelling, distanceToNext) = Labeller.labelLocationsWithBackground(CurrentUser.is.openTheBox, locations)
+        val finalLabelling = labelWithBackground(segments, backgroundFacilities)
+        val augmentedLabelling = augmentWithTruth(finalLabelling._1) //perhaps: put truth in already?
 
-        actsAndLegs = toPlanElements(finalLabelling)
+
+        // not using labelled facilities from labelling, but inferring facilities freshly from only today (with truth)
+        val finalFacilities = Labeller.deriveFacilities(augmentedLabelling.filter(s => s.isActivity))
+        val withNearestFacility = snapActivitiesToNearestFacility(augmentedLabelling, finalFacilities)
+
+        actsAndLegs = toPlanElements(withNearestFacility)
+        facilities = finalFacilities
         assert(actsAndLegs.map(planElement => planElement.segments).flatten.map(segment => segment.locations).flatten.size == locations.size)
         "#planList *" #> actsAndLegs.map { planElement =>
           "#planElementText *" #> planElement.toString &
@@ -135,7 +146,24 @@ class ShowPlan extends Logger {
 
   }
 
+  def snapActivitiesToNearestFacility(segments: List[LabelledSegment], facilities: List[Facility]) = {
+    for (segment <- segments) yield {
+      if (segment.isActivity)
+        SegmentWithFacility(segment, Labeller.findNearFacility(segment.segment, facilities))
+      else
+        SegmentWithFacility(segment, None)
+    }
+  }
 
+  def augmentWithTruth(finalLabelling: List[LabelledSegment]): List[LabelledSegment] = {
+    for (segment <- finalLabelling) yield {
+      val inTrueActivity = theTruth.contents exists { t =>
+        new Interval(new DateTime(segment.segment.startTime), new DateTime(segment.segment.endTime))
+        .overlaps(new Interval(new DateTime(t.from), new DateTime(t.to)))
+      }
+      if (inTrueActivity) segment.copy(isActivity = inTrueActivity) else segment
+    }
+  }
 
   def makeLeg(act1: JsObj, act2: JsObj): JsObj = {
     JsObj(("start", act1), ("end", act2))
@@ -161,9 +189,9 @@ class ShowPlan extends Logger {
       }))) & JsRaw("drawChart(data)").cmd
   }
 
-  def renderGoogleMap = renderLocations(actsAndLegs.toList)
+  def renderGoogleMap = renderLocations(actsAndLegs.toList, facilities.toList)
 
-  def renderLocations(planElements: List[PlanElement]): NodeSeq = {
+  def renderLocations(planElements: List[PlanElement], facilities: List[Facility]): NodeSeq = {
 
     val activities = planElements.collect {case activity: Activity => activity}
     val activitiesAtFacilities = activities.groupBy(_._segments.head.facility.get)
@@ -174,7 +202,11 @@ class ShowPlan extends Logger {
       JsObj(("title", times.toString),
       ("lat", location.lat.toString),
       ("lng", location.long.toString))
-    }
+    } ::: (for (facility <- facilities if !activitiesAtFacilities.contains(facility) ) yield {
+      JsObj(("title", "non-used facility"),
+        ("lat", facility.location.lat.toString),
+        ("lng", facility.location.long.toString))
+    })
 
     val jsLegs: Seq[JsObj] = planElements.collect {
       case leg: Leg => makeLeg(leg)
@@ -200,8 +232,8 @@ class ShowPlan extends Logger {
             // build a row out of a cart item
             def html(ci: TruthItem): NodeSeq = {
               ("tr [id]" #> ciToId(ci) &
-                "@from *" #> Text(ci.from.toString) &
-                "@to *" #> Text(ci.to.toString) &
+                "@from *" #> Text(theTimeFormat.print(new DateTime(ci.from))) &
+                "@to *" #> Text(theTimeFormat.print(new DateTime(ci.to))) &
                 "@tag *" #> Text(ci.tag) &
                 "@del [onclick]" #> SHtml.
                   ajaxInvoke(() => {
@@ -219,20 +251,20 @@ class ShowPlan extends Logger {
   }
 
   def renderTruthButton = {
-    var from = theDateFormat.format(new Date())
-    var to = theDateFormat.format(new Date())
+    var from = theTimeFormat.print(new DateTime())
+    var to = theTimeFormat.print(new DateTime())
     var tag = "c"
       // "@from" #> SHtml.text(theDateFormat.format(date), content => JsCmds.RedirectTo(MyBoot.googleUrl(("/google_map/" + content))))
     "@from *" #> SHtml.text(from, content => from = content) &
     "@to *" #> SHtml.text(to, content => to = content)  &
     "@tag *" #> SHtml.text(tag, content => {
       tag = content
-      theTruth.addItem(TruthItem(theDateFormat.parse(from), theDateFormat.parse(to), tag))
+      theTruth.addItem(TruthItem(new DateTime(date).withFields(theTimeFormat.parseLocalTime(from)).toDate, new DateTime(date).withFields(theTimeFormat.parseLocalTime(to)).toDate, tag))
     })
   }
 
   def makeLeg(leg: ShowPlan.this.type#Leg): JsObj = {
-    val distance = LatLong.calcDistance(leg.activity1.head.segment.locations.head.location, leg.activity2.last.segment.locations.head.location)
+    val distance = LatLong.calcDistance(leg.activity1.head.segment.segment.locations.head.location, leg.activity2.last.segment.segment.locations.head.location)
     val duration = new Duration(new DateTime(leg.startTime), new DateTime(leg.endTime)).getStandardSeconds
     JsObj(("points", JsArray(List(leg.activity1.head.facility.get.location, leg.activity2.head.facility.get.location).map {
       location => JsObj(("lat", location.lat), ("lng", location.long))
@@ -246,7 +278,7 @@ class ShowPlan extends Logger {
 
 
   object LegActivityTail {
-    def unapply(xs: List[LabelledSegment]) = {
+    def unapply(xs: List[SegmentWithFacility]) = {
       val (leg, rest) = xs.span(_.facility.isEmpty)
       rest match {
         case act :: tail if act.facility.isDefined  => Some(leg,act,tail)
@@ -256,12 +288,11 @@ class ShowPlan extends Logger {
   }
 
 
-  def toPlanElements(labelling: Labeller.Labelling) = {
-    val segments = labelling._1
+  def toPlanElements(segments: List[SegmentWithFacility]) = {
     // group by switch of facility.
     // danach hab ich aber gemerkt, dass ich leere listen dazwischen haben will, wenn die facility von gesetzt auf
     // gesetzt wechselt .. total bloed.
-    def groupByFacility(segments: List[LabelledSegment]) : List[List[LabelledSegment]] = {
+    def groupByFacility(segments: List[SegmentWithFacility]) : List[List[SegmentWithFacility]] = {
       segments match {
         case Nil => Nil
         case firstSegment :: rest => {

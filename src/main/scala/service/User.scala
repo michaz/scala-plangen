@@ -21,6 +21,6 @@ class User(login: Credential) {
     Oauth2.builder(new NetHttpTransport(), new JacksonFactory()).setHttpRequestInitializer(login).build.userinfo.get.execute.getId
   }
 
-  def findAllLocations = Location.findAll("user_id" -> currentUserId)
+  def findAllLocations = Location.findAll("user_id" -> currentUserId).sortBy(_.timestamp.getTime)
 
 }
