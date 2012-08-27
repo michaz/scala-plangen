@@ -6,7 +6,7 @@ import net.liftweb.common.{Full, Logger}
 import java.text.SimpleDateFormat
 import xml.{NodeSeq, Text}
 import net.liftweb.http._
-import data.mongo.{LatLong, Location}
+import data.mongo.{TruthRecord, TruthItem, LatLong, Location}
 import org.joda.time.{Interval, DateTime, Duration}
 import net.liftweb.http.js.{JsExp, JE, JsCmd, JsObj}
 import net.liftweb.http.js.JE.{JsRaw, JsArray, JsObj}
@@ -23,6 +23,8 @@ import xml.Text
 import net.liftweb.common.Full
 import org.joda.time.format.DateTimeFormat
 
+import org.bson.types.ObjectId
+
 /**
  * A snippet transforms input to output... it transforms
  * templates to dynamic content.  Lift's templates can invoke
@@ -33,27 +35,69 @@ import org.joda.time.format.DateTimeFormat
  * objects, singletons.  Singletons are useful if there's
  * no explicit state managed in the snippet.
  */
-object TheTruth extends SessionVar[Truth](new Truth())
 
-class Truth {
 
-  val contents = ValueCell[Vector[TruthItem]](Vector())
-
-  def addItem(item: TruthItem) {
-    contents.atomicUpdate(v => v :+ item)
-  }
-
-  def removeItem(item: TruthItem) {
-    contents.atomicUpdate(v => v.filterNot(_ == item))
-  }
-
-}
-
-case class TruthItem(from: Date, to: Date, tag: String) {
-  def id = from.getTime()+"_"+to.getTime()+"_"+tag
-}
 
 class ShowPlan extends Logger {
+
+  class Truth {
+
+    val contents = ValueCell[Vector[TruthItem]](Vector())
+
+    def addItem(item: TruthItem) {
+      contents.atomicUpdate(v => v :+ item)
+      save
+    }
+
+    def removeItem(item: TruthItem) {
+      contents.atomicUpdate(v => v.filterNot(_ == item))
+      save
+    }
+
+    def clear {
+      contents.atomicUpdate(v => Vector())
+    }
+
+    def isMergeable(item: TruthItem) = {
+      true
+    }
+
+    def merge(item: TruthItem) {
+      val i = contents.indexOf(item)
+      val prev = contents(i-1)
+      val next = contents(i+1)
+      val merged = TruthItem(prev.from, next.to, if(prev.tag == next.tag) prev.tag else prev.tag + "/" + next.tag)
+      contents.atomicUpdate(v => {
+        val firstHalf = v.take(i-1)
+        val secondHalf = v.drop(i+2)
+        firstHalf ++ (merged +: secondHalf)
+      })
+      save
+    }
+
+    def load {
+      // not atomic
+      contents.atomicUpdate (v => {
+        var temp = Vector[TruthItem]()
+        for (truthRecord <- TruthRecord.findByDay(date)) {
+          temp = temp :+ truthRecord.ti
+        }
+        temp
+      })
+    }
+
+    def save {
+      var oldTruth = TruthRecord.findByDay(date)
+      for (truthItem <- oldTruth) {
+        truthItem.delete
+      }
+      for (truthItem <- contents) {
+        TruthRecord(ObjectId.get, CurrentUser.is.openTheBox.currentUserId, truthItem).save
+      }
+    }
+
+  }
+
 
   abstract class PlanElement {
     def segments: List[Segment]
@@ -87,7 +131,7 @@ class ShowPlan extends Logger {
   private[this] val theDateFormat = new SimpleDateFormat("yyyy-MM-dd")
   private[this] val theTimeFormat = DateTimeFormat.mediumTime().withLocale(Locale.GERMANY)
 
-  val theTruth = TheTruth.get // Resolve SessionVar. If I access the RequestVar directly from the AJAX callbacks,
+  val theTruth = new Truth() // Previously resolved a RequestVar. If I access the RequestVar directly from the AJAX callbacks,
   // they are not restored. Perhaps Lift bug #980 ? But this way I think it is a correct workaround - all the callbacks
   // close around the same object. Perhaps I wouldn't even need a RequestVar.
 
@@ -112,6 +156,7 @@ class ShowPlan extends Logger {
     S.param("date") match {
       case Full(dateParam) => {
         date = theDateFormat.parse(dateParam)
+        theTruth.load
         val locations = Location.findByDay(date)
         val user = CurrentUser.is.openTheBox
         val backgroundFacilities = computeBackgroundFacilities(user) // later: LOADbackgroundfacilities (and trained network)
@@ -157,7 +202,7 @@ class ShowPlan extends Logger {
 
   def augmentWithTruth(finalLabelling: List[LabelledSegment]): List[LabelledSegment] = {
     for (segment <- finalLabelling) yield {
-      val inTrueActivity = theTruth.contents exists { t =>
+      val inTrueActivity = theTruth.contents.filter(_.tag == "act") exists { t =>
         new Interval(new DateTime(segment.segment.startTime), new DateTime(segment.segment.endTime))
         .overlaps(new Interval(new DateTime(t.from), new DateTime(t.to)))
       }
@@ -235,10 +280,15 @@ class ShowPlan extends Logger {
                 "@from *" #> Text(theTimeFormat.print(new DateTime(ci.from))) &
                 "@to *" #> Text(theTimeFormat.print(new DateTime(ci.to))) &
                 "@tag *" #> Text(ci.tag) &
-                "@del [onclick]" #> SHtml.
-                  ajaxInvoke(() => {
+                "@del [onclick]" #> SHtml.ajaxInvoke(() => {
                   theTruth.removeItem(ci)
-                }))(theTR)
+                }) &
+                "@merge [onClick]"#> SHtml.ajaxInvoke(() => {
+                  if (theTruth.isMergeable(ci)) {
+                    theTruth.merge(ci)
+                  }
+                })
+                )(theTR)
             }
 
             // calculate the delta between the lists and
@@ -250,6 +300,8 @@ class ShowPlan extends Logger {
       )
   }
 
+
+
   def renderTruthButton = {
     var from = theTimeFormat.print(new DateTime())
     var to = theTimeFormat.print(new DateTime())
@@ -260,8 +312,26 @@ class ShowPlan extends Logger {
     "@tag *" #> SHtml.text(tag, content => {
       tag = content
       theTruth.addItem(TruthItem(new DateTime(date).withFields(theTimeFormat.parseLocalTime(from)).toDate, new DateTime(date).withFields(theTimeFormat.parseLocalTime(to)).toDate, tag))
-    })
+    }) &
+    "@fill [onClick]" #> SHtml.ajaxInvoke(() => {fillTruth})
   }
+
+  def fillTruth = {
+    theTruth.clear
+    for (planElement <- actsAndLegs) {
+      planElement match {
+        case a:Activity => {
+          theTruth.addItem(TruthItem(a.startTime, a.endTime, "act"))
+        }
+        case l:Leg => {
+          theTruth.addItem(TruthItem(l.startTime, l.endTime, "leg"))
+        }
+        case _ => {}
+      }
+      }
+    }
+
+
 
   def makeLeg(leg: ShowPlan.this.type#Leg): JsObj = {
     val distance = LatLong.calcDistance(leg.activity1.head.segment.segment.locations.head.location, leg.activity2.last.segment.segment.locations.head.location)

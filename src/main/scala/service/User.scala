@@ -17,7 +17,7 @@ import com.google.api.client.auth.oauth2.Credential
 
 class User(login: Credential) {
 
-  def currentUserId: String = {
+  val currentUserId: String = {
     Oauth2.builder(new NetHttpTransport(), new JacksonFactory()).setHttpRequestInitializer(login).build.userinfo.get.execute.getId
   }
 
