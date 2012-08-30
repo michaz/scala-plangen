@@ -201,14 +201,10 @@ class ShowPlan extends Logger {
   }
 
   def augmentWithTruth(finalLabelling: List[LabelledSegment]): List[LabelledSegment] = {
-    for (segment <- finalLabelling) yield {
-      val inTrueActivity = theTruth.contents.filter(_.tag == "act") exists { t =>
-        new Interval(new DateTime(segment.segment.startTime), new DateTime(segment.segment.endTime))
-        .overlaps(new Interval(new DateTime(t.from), new DateTime(t.to)))
-      }
-      if (inTrueActivity) segment.copy(isActivity = inTrueActivity) else segment
-    }
+    val (truth, _) = theTruth.contents.currentValue
+    Labeller.augmentWithTruth(finalLabelling, truth)
   }
+
 
   def makeLeg(act1: JsObj, act2: JsObj): JsObj = {
     JsObj(("start", act1), ("end", act2))

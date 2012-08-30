@@ -1,7 +1,7 @@
 package algorithm
 
-import data.mongo.{LatLong, Location}
-import org.joda.time.{DateTime, Duration}
+import data.mongo.{TruthItem, LatLong, Location}
+import org.joda.time.{Interval, DateTime, Duration}
 import net.liftweb.json.JsonAST.JNothing
 import util.Clusterer.ThingToCluster
 import util.Clusterer
@@ -147,6 +147,19 @@ object Labeller {
     val n = points.size
     val sum = points.foldLeft((0.0,0.0)) { (p1,p2) => (p1._1+p2.lat, p1._2+p2.long) }
     LatLong(sum._1 / n, sum._2 / n)
+  }
+
+
+
+  def augmentWithTruth(finalLabelling: Seq[Labeller.LabelledSegment], truth: Seq[TruthItem]): List[Labeller.LabelledSegment] = {
+    (for (segment <- finalLabelling) yield {
+      val inTrueActivity = truth.filter(_.tag == "act") exists {
+        t =>
+          new Interval(new DateTime(segment.segment.startTime), new DateTime(segment.segment.endTime))
+            .overlaps(new Interval(new DateTime(t.from), new DateTime(t.to)))
+      }
+      if (inTrueActivity) segment.copy(isActivity = inTrueActivity) else segment
+    }).toList
   }
 
 }

@@ -20,6 +20,7 @@ import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.googleapis.auth.oauth2.{GoogleCredential, GoogleAuthorizationCodeTokenRequest, GoogleAuthorizationCodeRequestUrl}
 import com.google.api.client.auth.oauth2.Credential
 import service.User
+import com.google.api.services.oauth2.Oauth2
 
 
 case class OAuth2ClientCredentials(CLIENT_ID: String, CLIENT_SECRET: String)
@@ -110,7 +111,7 @@ class Boot {
 
             S.param("state") match {
               case Full("/login") => {
-                CurrentUser.set(Full(new User(credential)))
+                CurrentUser.set(Full(new User(Oauth2.builder(new NetHttpTransport(), new JacksonFactory()).setHttpRequestInitializer(credential).build.userinfo.get.execute.getId)))
                 Full(RedirectResponse("/"))
               }
               case Full(other) => Full(RedirectWithState(other, RedirectState(()=>LatitudeResource.set(Full(credential)))))

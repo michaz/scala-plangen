@@ -47,7 +47,7 @@ object Location extends MongoDocumentMeta[Location] with Logger {
     command.put("group", params)
     val result = db.command(command)
     val retval = result.get("retval").asInstanceOf[BasicDBList]
-    val days = retval.map(doc => doc.asInstanceOf[BasicDBObject].get("day"))
+    val days = retval.map(doc => doc.asInstanceOf[BasicDBObject].get("day").asInstanceOf[Date])
     days
   })
 

@@ -15,11 +15,9 @@ import com.google.api.client.auth.oauth2.Credential
  * To change this template use File | Settings | File Templates.
  */
 
-class User(login: Credential) {
 
-  val currentUserId: String = {
-    Oauth2.builder(new NetHttpTransport(), new JacksonFactory()).setHttpRequestInitializer(login).build.userinfo.get.execute.getId
-  }
+
+class User(val currentUserId: String) {
 
   def findAllLocations = Location.findAll("user_id" -> currentUserId).sortBy(_.timestamp.getTime)
 
