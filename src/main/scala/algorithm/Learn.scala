@@ -93,6 +93,7 @@ object Learn extends App {
         var pl: PropertyList = null
         pl = PropertyList.add("duration", segment.segment.minutes, pl)
         pl = PropertyList.add("checkin", if(segment.segment.containsCheckin) 1.0 else 0.0, pl)
+        // pl = PropertyList.add("number-points", segment.segment.locations.size, pl)
         val facility = Labeller.findNearFacility(segment.segment, facilities.toList)
         if (facility.isDefined) {
           pl = PropertyList.add("distance", (Labeller.SNAP_TO_FACILITY - LatLong.calcDistance(facility.get.location, segment.segment.locations.head.location)) / Labeller.SNAP_TO_FACILITY, pl)

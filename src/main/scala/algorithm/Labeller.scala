@@ -152,13 +152,21 @@ object Labeller {
 
 
   def augmentWithTruth(finalLabelling: Seq[Labeller.LabelledSegment], truth: Seq[TruthItem]): List[Labeller.LabelledSegment] = {
-    (for (segment <- finalLabelling) yield {
-      val inTrueActivity = truth.filter(_.tag == "act") exists {
+
+    def isTruly(tag: String, segment: Labeller.LabelledSegment): Boolean = {
+      val acts = truth.filter(_.tag == tag)
+      val inTrueActivity = acts.exists {
         t =>
           new Interval(new DateTime(segment.segment.startTime), new DateTime(segment.segment.endTime))
             .overlaps(new Interval(new DateTime(t.from), new DateTime(t.to)))
       }
-      if (inTrueActivity) segment.copy(isActivity = inTrueActivity) else segment
+      inTrueActivity
+    }
+
+    (for (segment <- finalLabelling) yield {
+      if (isTruly("act", segment)) segment.copy(isActivity = true)
+      else if (isTruly("leg", segment)) segment.copy(isActivity = false)
+      else segment
     }).toList
   }
 
