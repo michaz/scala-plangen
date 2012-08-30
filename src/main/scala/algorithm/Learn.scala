@@ -17,7 +17,7 @@ import algorithm.Labeller.LabelledSegment
 import net.liftweb.common.Full
 import cc.mallet.pipe.Pipe
 import cc.mallet.grmm.learning.{DefaultAcrfTrainer, ACRF}
-import org.joda.time.{DateTime, Interval}
+import org.joda.time.{LocalDate, DateTime, Interval}
 
 /**
  * Created with IntelliJ IDEA.
@@ -41,6 +41,8 @@ object Learn extends App {
     val labellings = (for (day <- days) yield {
       val truth = TruthRecord.findByDay(day).map(_.ti)
       if(!truth.isEmpty) {
+        println(day)
+        println(truth)
         val locations = Location.findByDay(day)
         val Segmentation(segments, distanceToNext) = segment(locations)
         val labelling = labelWithTruth(segments, truth)

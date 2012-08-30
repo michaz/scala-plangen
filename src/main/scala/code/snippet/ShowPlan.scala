@@ -7,7 +7,7 @@ import java.text.SimpleDateFormat
 import xml.{NodeSeq, Text}
 import net.liftweb.http._
 import data.mongo.{TruthRecord, TruthItem, LatLong, Location}
-import org.joda.time.{Interval, DateTime, Duration}
+import org.joda.time.{LocalDate, Interval, DateTime, Duration}
 import net.liftweb.http.js.{JsExp, JE, JsCmd, JsObj}
 import net.liftweb.http.js.JE.{JsRaw, JsArray, JsObj}
 import net.liftweb.http.js.JsCmds.{OnLoad, Script, JsCrVar}
@@ -79,7 +79,7 @@ class ShowPlan extends Logger {
       // not atomic
       contents.atomicUpdate (v => {
         var temp = Vector[TruthItem]()
-        for (truthRecord <- TruthRecord.findByDay(date)) {
+        for (truthRecord <- TruthRecord.findByDay(new LocalDate(date))) {
           temp = temp :+ truthRecord.ti
         }
         temp
@@ -87,7 +87,7 @@ class ShowPlan extends Logger {
     }
 
     def save {
-      var oldTruth = TruthRecord.findByDay(date)
+      var oldTruth = TruthRecord.findByDay(new LocalDate(date))
       for (truthItem <- oldTruth) {
         truthItem.delete
       }
@@ -157,7 +157,7 @@ class ShowPlan extends Logger {
       case Full(dateParam) => {
         date = theDateFormat.parse(dateParam)
         theTruth.load
-        val locations = Location.findByDay(date)
+        val locations = Location.findByDay(new LocalDate(date))
         val user = CurrentUser.is.openTheBox
         val backgroundFacilities = computeBackgroundFacilities(user) // later: LOADbackgroundfacilities (and trained network)
 

@@ -36,7 +36,7 @@ object Upload extends Logger {
       readings.sortBy( l => l.when.toDate.getTime )
       val days = readings.map(_.when.toLocalDate).distinct
       days.foreach(info(_))
-      days.foreach(day => Location.findByDay(day.toDateMidnight.toDate).foreach(loc => loc.delete))
+      days.foreach(day => Location.findByDay(day).foreach(loc => loc.delete))
       readings.foreach {reading =>
         val coords = reading.coord.split(" ").map{java.lang.Double.parseDouble(_)}
         Location(ObjectId.get, user, LatLong( coords(1), coords(0)), reading.when.toDate, parse("")).save

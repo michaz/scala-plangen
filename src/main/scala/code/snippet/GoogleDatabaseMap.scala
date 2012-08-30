@@ -14,6 +14,7 @@ import java.text.SimpleDateFormat
 import xml.NodeSeq
 import service.User
 import bootstrap.liftweb.CurrentUser
+import org.joda.time.LocalDate
 
 class GoogleDatabaseMap extends Logger {
 
@@ -29,7 +30,7 @@ class GoogleDatabaseMap extends Logger {
       case Full(dateParam) => date = theDateFormat.parse(dateParam)
       case _ => ()
     }
-    locations = Location.findByDay(date)
+    locations = Location.findByDay(new LocalDate(date))
     renderGoogleMap()
   }
 
@@ -73,7 +74,7 @@ class GoogleDatabaseMap extends Logger {
       JsCmds.Alert("Done")
     }) &
     "#delete_day [onClick]" #> SHtml.ajaxInvoke(() => {
-      Location.findByDay(date).foreach(_.delete)
+      Location.findByDay(new LocalDate(date)).foreach(_.delete)
       List(JsCmds.Alert("Done"), JsCmds.RedirectTo("/locations/day/"))
     })
   }

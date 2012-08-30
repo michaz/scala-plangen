@@ -17,6 +17,7 @@ import service.{Latitude, User}
 
 import net.liftweb.json.JsonParser._
 import bootstrap.liftweb.{CurrentUser, MyBoot, Boot}
+import org.joda.time.LocalDate
 
 
 class GoogleMap extends Logger {
@@ -66,7 +67,7 @@ class GoogleMap extends Logger {
       "#morgen [href]" #> MyBoot.googleUrl("/google_map/" + theDateFormat.format(new Date(date.getTime + 24 * 60 * 60 * 1000))) &
       "#date" #> SHtml.text(theDateFormat.format(date), content => JsCmds.RedirectTo(MyBoot.googleUrl(("/google_map/" + content)))) &
       "#submit [onClick]" #> SHtml.ajaxInvoke(() => {
-        Location.findByDay(date).foreach(_.delete)
+        Location.findByDay(new LocalDate(date)).foreach(_.delete)
         locations.foreach(_.save)
       })
   }

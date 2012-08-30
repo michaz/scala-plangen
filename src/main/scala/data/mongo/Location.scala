@@ -10,7 +10,7 @@ import net.liftweb.common.Logger
 import bootstrap.liftweb.CurrentUser
 import net.liftweb.json.JsonAST.{JValue, JObject}
 import org.geotools.referencing.GeodeticCalculator
-
+import org.joda.time.LocalDate
 
 
 case class LatLong(lat: Double, long: Double) {
@@ -47,16 +47,17 @@ object Location extends MongoDocumentMeta[Location] with Logger {
     command.put("group", params)
     val result = db.command(command)
     val retval = result.get("retval").asInstanceOf[BasicDBList]
-    val days = retval.map(doc => doc.asInstanceOf[BasicDBObject].get("day").asInstanceOf[Date])
+    val days = retval.map(doc => new LocalDate(doc.asInstanceOf[BasicDBObject].get("day").asInstanceOf[Date]))
     days
   })
 
-  def findByDay(timestamp: Date) = {
-    val tonight = new Date(timestamp.getTime + 60 * 60 * 24 * 1000)
-    trace("Fetching locations from %s to %s from database.".format(timestamp, tonight))
+  def findByDay(timestamp: LocalDate) = {
+    val thismorning = new Date(timestamp.toDateMidnight.toDate.getTime)
+    val tonight = new Date(timestamp.toDateMidnight.toDate.getTime + 60 * 60 * 24 * 1000)
+    info("Fetching locations from %s to %s from database.".format(thismorning, tonight))
     val userId = CurrentUser.is.openTheBox.currentUserId
     val results = Location
-      .findAll( ("timestamp" -> ("$gte" -> timestamp) ~ ("$lt" -> tonight)) ~ ("user_id" -> userId) )
+      .findAll( ("timestamp" -> ("$gte" -> thismorning) ~ ("$lt" -> tonight)) ~ ("user_id" -> userId) )
       .sortBy(_.timestamp.getTime)
     results.foreach(trace(_))
     results

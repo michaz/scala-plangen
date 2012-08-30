@@ -9,6 +9,7 @@ import xml.Text
 import java.util.Date
 import net.liftweb.http.S
 import java.text.SimpleDateFormat
+import org.joda.time.LocalDate
 
 /**
  * A snippet transforms input to output... it transforms
@@ -27,7 +28,7 @@ object LatitudeList extends Logger {
   def render = S.param("date") match {
     case Full(dateParam) => {
       val date = theDateFormat.parse(dateParam)
-      val locations = Location.findByDay(date)
+      val locations = Location.findByDay(new LocalDate(date))
       "li *" #> {
         (locations sortBy (_.timestamp.getTime)).map(_.toString)
       } &

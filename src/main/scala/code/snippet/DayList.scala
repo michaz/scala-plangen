@@ -22,7 +22,7 @@ object DayList extends Logger {
 
   def render = "li *" #> {
     Location.findDays.map(date => {
-      val dateString = theDateFormat.format(date)
+      val dateString = theDateFormat.format(date.toDate)
       "#maplink" #> ("a [href]" #> (dateString + "/map") & "a *" #> dateString) &
       "#listlink" #> ("a [href]" #> (dateString + "/")) &
       "#planlink" #> ("a [href]" #> (dateString + "/plan"))
