@@ -34,11 +34,11 @@ object Learn extends App {
   val featureAlphabet = new Alphabet
   val pipe = new Pipe(featureAlphabet, labelDict){}
   val training = new InstanceList(pipe)
-  S.initIfUninitted(session) {
+  val labellings = S.initIfUninitted(session) {
     val user = new User("111742407880819503242")
     CurrentUser.set(Full(user)) // That's me!
     val days = Location.findDays
-    val labellings = (for (day <- days) yield {
+    (for (day <- days) yield {
       val truth = TruthRecord.findByDay(day).map(_.ti)
       if(!truth.isEmpty) {
         println(day)
@@ -51,17 +51,15 @@ object Learn extends App {
         None
       }
     }).flatten
-
-    val facilities = deriveFacilities(labellings.flatten.toList.filter(_.isActivity))
-    println("Number of hotspots in training set: " + facilities.size)
-
-    for (labelling <- labellings) {
-      val instance = constructInstance(labelling, facilities)
-      training.add(instance)
-    }
-
   }
 
+  val facilities = deriveFacilities(labellings.flatten.toList.filter(_.isActivity))
+  println("Number of hotspots in training set: " + facilities.size)
+
+  for (labelling <- labellings) {
+    val instance = constructInstance(labelling, facilities)
+    training.add(instance)
+  }
 
   def labelWithTruth(labelling: Seq[Segment], truth: Seq[TruthItem]): List[LabelledSegment] = {
     (for (segment <- labelling) yield {
@@ -85,6 +83,15 @@ object Learn extends App {
   val testing = training
   trainer.train (acrf, training, null, testing, 100);
 
+  S.initIfUninitted(session) {
+    val days = Location.findDays
+    for (day <- days) yield {
+      val locations = Location.findByDay(day)
+      val Segmentation(segments, distanceToNext) = segment(locations)
+      evaluate(segments)
+    }
+  }
+
   def constructInstance(truthItems: Seq[LabelledSegment], facilities: Seq[Facility]) = {
     var featureVectors = Vector[FeatureVector]()
     var labellings = Vector[Labels]()
@@ -92,21 +99,38 @@ object Learn extends App {
         val label = labelDict.lookupLabel(if(segment.isActivity) "act" else "leg")
         val labelling = new Labels(Vector(label).toArray)
         labellings = labellings :+ labelling
-        var pl: PropertyList = null
-        pl = PropertyList.add("duration", segment.segment.minutes, pl)
-        pl = PropertyList.add("checkin", if(segment.segment.containsCheckin) 1.0 else 0.0, pl)
-        // pl = PropertyList.add("number-points", segment.segment.locations.size, pl)
-        val facility = Labeller.findNearFacility(segment.segment, facilities.toList)
-        if (facility.isDefined) {
-          pl = PropertyList.add("distance", (Labeller.SNAP_TO_FACILITY - LatLong.calcDistance(facility.get.location, segment.segment.locations.head.location)) / Labeller.SNAP_TO_FACILITY, pl)
-        }
-        val featureVector = new FeatureVector(featureAlphabet, pl, false)
+        val featureVector: FeatureVector = computeFeatureVector(segment.segment, facilities)
         featureVectors = featureVectors :+ featureVector
     }
 
     val data = new FeatureVectorSequence(featureVectors.toArray)
     val target = new LabelsAssignment(new LabelsSequence(labellings.toArray))
     new Instance(data, target, null, null)
+  }
+
+
+  def computeFeatureVector(segment: Labeller.Segment, facilities: scala.Seq[Labeller.Facility]): FeatureVector = {
+    var pl: PropertyList = null
+    pl = PropertyList.add("duration", segment.minutes, pl)
+    pl = PropertyList.add("checkin", if (segment.containsCheckin) 1.0 else 0.0, pl)
+    // pl = PropertyList.add("number-points", segment.segment.locations.size, pl)
+    val facility = Labeller.findNearFacility(segment, facilities.toList)
+    if (facility.isDefined) {
+      pl = PropertyList.add("distance", (Labeller.SNAP_TO_FACILITY - LatLong.calcDistance(facility.get.location, segment.locations.head.location)) / Labeller.SNAP_TO_FACILITY, pl)
+    }
+    val featureVector = new FeatureVector(featureAlphabet, pl, false)
+    featureVector
+  }
+
+  def evaluate(segments: Seq[Segment]) = {
+    val instance = constructInstance(segments.map(LabelledSegment(_, false)), facilities)
+    val labelsInCrappyType = acrf.getBestLabels(instance)
+    val labels = (0 to labelsInCrappyType.size-1).map(labelsInCrappyType.getLabels(_))
+    for ((segment, label) <- segments zip labels) yield {
+      val actOrLeg = label.get(0).toString
+      println(actOrLeg)
+      LabelledSegment(segment, if(actOrLeg == "act") true else if(actOrLeg == "leg") false else throw new RuntimeException(actOrLeg) )
+    }
   }
 
 }
