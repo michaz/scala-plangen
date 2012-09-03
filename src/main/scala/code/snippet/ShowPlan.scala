@@ -13,7 +13,7 @@ import net.liftweb.http.js.JE.{JsRaw, JsArray, JsObj}
 import net.liftweb.http.js.JsCmds.{OnLoad, Script, JsCrVar}
 import java.util.{Locale, Date}
 import algorithm.Labeller._
-import algorithm.Labeller
+import algorithm.{Learn, Labeller}
 import bootstrap.liftweb.CurrentUser
 import net.liftweb.http.js.jquery.JqWiringSupport
 import net.liftweb.util
@@ -39,6 +39,8 @@ import org.bson.types.ObjectId
 
 
 class ShowPlan extends Logger {
+
+  val USE_LEARNING = true
 
   class Truth {
 
@@ -159,20 +161,29 @@ class ShowPlan extends Logger {
         theTruth.load
         val locations = Location.findByDay(new LocalDate(date))
         val user = CurrentUser.is.openTheBox
-        val backgroundFacilities = computeBackgroundFacilities(user) // later: LOADbackgroundfacilities (and trained network)
 
         val Segmentation(segments, distanceToNext) = segment(locations)
+        val labelling = if (USE_LEARNING) {
+          val labelling = Learn.evaluate(segments)
+          labelling
+        } else {
+          val backgroundFacilities = computeBackgroundFacilities(user) // later: LOADbackgroundfacilities (and trained network)
+          val finalLabelling = labelWithBackground(segments, backgroundFacilities)
+          val augmentedLabelling = augmentWithTruth(finalLabelling._1) //perhaps: put truth in already?
+          augmentedLabelling
+        }
 
-        val finalLabelling = labelWithBackground(segments, backgroundFacilities)
-        val augmentedLabelling = augmentWithTruth(finalLabelling._1) //perhaps: put truth in already?
+        // not using labelled facilities from labelling, but inferring facilities freshly from only today
+        val finalFacilities = Labeller.deriveFacilities(labelling.filter(s => s.isActivity))
+        val withNearestFacility = snapActivitiesToNearestFacility(labelling, finalFacilities).toList
+
+        val planElements = toPlanElements(withNearestFacility)
 
 
-        // not using labelled facilities from labelling, but inferring facilities freshly from only today (with truth)
-        val finalFacilities = Labeller.deriveFacilities(augmentedLabelling.filter(s => s.isActivity))
-        val withNearestFacility = snapActivitiesToNearestFacility(augmentedLabelling, finalFacilities)
-
-        actsAndLegs = toPlanElements(withNearestFacility)
+        actsAndLegs = planElements
         facilities = finalFacilities
+
+
         assert(actsAndLegs.map(planElement => planElement.segments).flatten.map(segment => segment.locations).flatten.size == locations.size)
         "#planList *" #> actsAndLegs.map { planElement =>
           "#planElementText *" #> planElement.toString &
@@ -191,7 +202,7 @@ class ShowPlan extends Logger {
 
   }
 
-  def snapActivitiesToNearestFacility(segments: List[LabelledSegment], facilities: List[Facility]) = {
+  def snapActivitiesToNearestFacility(segments: Seq[LabelledSegment], facilities: List[Facility]) = {
     for (segment <- segments) yield {
       if (segment.isActivity)
         SegmentWithFacility(segment, Labeller.findNearFacility(segment.segment, facilities))

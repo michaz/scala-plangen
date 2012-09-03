@@ -26,18 +26,14 @@ import org.joda.time.{LocalDate, DateTime, Interval}
  * Time: 6:10 PM
  * To change this template use File | Settings | File Templates.
  */
-object Learn extends App {
+object Learn {
 
-  new bootstrap.liftweb.Boot().boot
-  val session = new LiftSession("", StringHelpers.randomString(20), Empty)
   val labelDict = new LabelAlphabet
   val featureAlphabet = new Alphabet
   val pipe = new Pipe(featureAlphabet, labelDict){}
   val training = new InstanceList(pipe)
-  val labellings = S.initIfUninitted(session) {
-    val user = new User("111742407880819503242")
-    CurrentUser.set(Full(user)) // That's me!
-    val days = Location.findDays
+  val days = Location.findDays
+  val labellings = {
     (for (day <- days) yield {
       val truth = TruthRecord.findByDay(day).map(_.ti)
       if(!truth.isEmpty) {
@@ -53,11 +49,11 @@ object Learn extends App {
     }).flatten
   }
 
-  val facilities = deriveFacilities(labellings.flatten.toList.filter(_.isActivity))
-  println("Number of hotspots in training set: " + facilities.size)
+  val facilitiesFromTruth = deriveFacilities(labellings.flatten.toList.filter(_.isActivity))
+  println("Number of hotspots in training set: " + facilitiesFromTruth.size)
 
   for (labelling <- labellings) {
-    val instance = constructInstance(labelling, facilities)
+    val instance = constructInstance(labelling, facilitiesFromTruth)
     training.add(instance)
   }
 
@@ -83,14 +79,17 @@ object Learn extends App {
   val testing = training
   trainer.train (acrf, training, null, testing, 100);
 
-  S.initIfUninitted(session) {
-    val days = Location.findDays
-    for (day <- days) yield {
-      val locations = Location.findByDay(day)
-      val Segmentation(segments, distanceToNext) = segment(locations)
-      evaluate(segments)
-    }
+
+  var facilitiesFromEvaluation = Seq[Facility]()
+  val labellingsFromEvaluation = for (day <- days) yield {
+    val locations = Location.findByDay(day)
+    val Segmentation(segments, distanceToNext) = segment(locations)
+    Learn.evaluate(segments)
   }
+  facilitiesFromEvaluation = deriveFacilities(labellings.flatten.toList.filter(_.isActivity))
+
+
+
 
   def constructInstance(truthItems: Seq[LabelledSegment], facilities: Seq[Facility]) = {
     var featureVectors = Vector[FeatureVector]()
@@ -123,7 +122,7 @@ object Learn extends App {
   }
 
   def evaluate(segments: Seq[Segment]) = {
-    val instance = constructInstance(segments.map(LabelledSegment(_, false)), facilities)
+    val instance = constructInstance(segments.map(LabelledSegment(_, false)), facilitiesFromEvaluation)
     val labelsInCrappyType = acrf.getBestLabels(instance)
     val labels = (0 to labelsInCrappyType.size-1).map(labelsInCrappyType.getLabels(_))
     for ((segment, label) <- segments zip labels) yield {

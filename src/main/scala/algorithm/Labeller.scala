@@ -136,7 +136,7 @@ object Labeller {
     }
   }
 
-  def deriveFacilities(segments: List[LabelledSegment]) = {
+  def deriveFacilities(segments: Seq[LabelledSegment]) = {
     val clusters = Clusterer.findSignificantLocations(segments.asJava).asScala.toList
     clusters.map { cluster =>
       Facility("wurst", average(for (segment<-cluster.asScala.toList; location<-segment.segment.locations) yield location.location))
