@@ -2,28 +2,32 @@ package code.snippet
 
 import _root_.net.liftweb.util._
 import Helpers._
-import net.liftweb.common.{Full, Logger}
+import net.liftweb.common.Logger
 import java.text.SimpleDateFormat
-import xml.{NodeSeq, Text}
+import xml.NodeSeq
 import net.liftweb.http._
-import data.mongo.{TruthRecord, TruthItem, LatLong, Location}
-import org.joda.time.{LocalDate, Interval, DateTime, Duration}
-import net.liftweb.http.js.{JsExp, JE, JsCmd, JsObj}
+import data.mongo.{LatLong, Location}
+import org.joda.time._
+import net.liftweb.http.js.{JsExp, JsCmd, JsObj}
 import net.liftweb.http.js.JE.{JsRaw, JsArray, JsObj}
 import net.liftweb.http.js.JsCmds.{OnLoad, Script, JsCrVar}
 import java.util.{Locale, Date}
 import algorithm.Labeller._
-import algorithm.{Learn, Labeller}
+import algorithm._
 import bootstrap.liftweb.CurrentUser
 import net.liftweb.http.js.jquery.JqWiringSupport
-import net.liftweb.util
-import scala.Some
-import algorithm.Labeller.LabelledSegment
-import xml.Text
-import net.liftweb.common.Full
 import org.joda.time.format.DateTimeFormat
 
-import org.bson.types.ObjectId
+import net.liftweb.util
+import algorithm.Labeller.SegmentWithFacility
+import scala.Some
+import algorithm.Labeller.LabelledSegment
+import algorithm.Labeller.Facility
+import xml.Text
+import data.mongo.TruthItem
+import algorithm.Labeller.Segmentation
+import net.liftweb.common.Full
+import algorithm.PlanMaker.{Other, Leg, Activity, PlanElement}
 
 /**
  * A snippet transforms input to output... it transforms
@@ -40,101 +44,16 @@ import org.bson.types.ObjectId
 
 class ShowPlan extends Logger {
 
-  val USE_LEARNING = true
 
-  class Truth {
+  // val ALGORITHM="truth"
+  val ALGORITHM="naive"
 
-    val contents = ValueCell[Vector[TruthItem]](Vector())
-
-    def addItem(item: TruthItem) {
-      contents.atomicUpdate(v => v :+ item)
-      save
-    }
-
-    def removeItem(item: TruthItem) {
-      contents.atomicUpdate(v => v.filterNot(_ == item))
-      save
-    }
-
-    def clear {
-      contents.atomicUpdate(v => Vector())
-    }
-
-    def isMergeable(item: TruthItem) = {
-      true
-    }
-
-    def merge(item: TruthItem) {
-      val i = contents.indexOf(item)
-      val prev = contents(i-1)
-      val next = contents(i+1)
-      val merged = TruthItem(prev.from, next.to, if(prev.tag == next.tag) prev.tag else prev.tag + "/" + next.tag)
-      contents.atomicUpdate(v => {
-        val firstHalf = v.take(i-1)
-        val secondHalf = v.drop(i+2)
-        firstHalf ++ (merged +: secondHalf)
-      })
-      save
-    }
-
-    def load {
-      // not atomic
-      contents.atomicUpdate (v => {
-        var temp = Vector[TruthItem]()
-        for (truthRecord <- TruthRecord.findByDay(new LocalDate(date))) {
-          temp = temp :+ truthRecord.ti
-        }
-        temp
-      })
-    }
-
-    def save {
-      var oldTruth = TruthRecord.findByDay(new LocalDate(date))
-      for (truthItem <- oldTruth) {
-        truthItem.delete
-      }
-      for (truthItem <- contents) {
-        TruthRecord(ObjectId.get, CurrentUser.is.openTheBox.currentUserId, truthItem).save
-      }
-    }
-
-  }
-
-
-  abstract class PlanElement {
-    def segments: List[Segment]
-    def startTime: Date
-    def endTime: Date
-    def minutes = new Duration(new DateTime(startTime), new DateTime(endTime)).getStandardMinutes
-  }
-
-  case class Activity(_segments: List[SegmentWithFacility]) extends PlanElement {
-    override def toString = "Act (" + startTime + "," + endTime + ") @ " + location
-    override def startTime = _segments.head.segment.segment.startTime
-    override def endTime = _segments.last.segment.segment.endTime
-    def location = _segments.head.facility.get.location
-    override def segments = _segments.map(_.segment.segment)
-  }
-
-  case class Leg(activity1: List[SegmentWithFacility], leg: List[SegmentWithFacility], activity2: List[SegmentWithFacility]) extends PlanElement {
-    override def toString = "Leg (" + startTime + "," + endTime + "): (" + activity1.last.segment.segment.locations.last.location + "," + activity2.head.segment.segment.locations.head.location
-    override def startTime = activity1.last.segment.segment.endTime
-    override def endTime = activity2.head.segment.segment.startTime
-    override def segments = leg.map(_.segment.segment)
-  }
-
-  case class Other(other: List[SegmentWithFacility]) extends PlanElement {
-    override def toString = segments.size + " other Elements."
-    override def segments = other.map(_.segment.segment)
-    override def startTime = other.head.segment.segment.startTime
-    override def endTime = other.last.segment.segment.endTime
-  }
+  // val ALGORITHM="learning"
 
   private[this] val theDateFormat = new SimpleDateFormat("yyyy-MM-dd")
   private[this] val theTimeFormat = DateTimeFormat.mediumTime().withLocale(Locale.GERMANY)
 
-  val theTruth = new Truth() // Previously resolved a RequestVar. If I access the RequestVar directly from the AJAX callbacks,
-  // they are not restored. Perhaps Lift bug #980 ? But this way I think it is a correct workaround - all the callbacks
+   // they are not restored. Perhaps Lift bug #980 ? But this way I think it is a correct workaround - all the callbacks
   // close around the same object. Perhaps I wouldn't even need a RequestVar.
 
   var actsAndLegs: Seq[PlanElement] = Nil
@@ -142,6 +61,8 @@ class ShowPlan extends Logger {
   var facilities: Seq[Facility] = Nil
 
   var date: Date = new Date()
+
+  var theTruth: Truth = null // Previously resolved a RequestVar. If I access the RequestVar directly from the AJAX callbacks,
 
   def render = {
 
@@ -158,30 +79,34 @@ class ShowPlan extends Logger {
     S.param("date") match {
       case Full(dateParam) => {
         date = theDateFormat.parse(dateParam)
+        theTruth = new Truth(date)
         theTruth.load
         val locations = Location.findByDay(new LocalDate(date))
         val user = CurrentUser.is.openTheBox
 
         val Segmentation(segments, distanceToNext) = segment(locations)
-        val labelling = if (USE_LEARNING) {
-          val labelling = Learn.evaluate(segments)
-          labelling
-        } else {
+        val labelling = if (ALGORITHM=="learning") {
+          val labelling = Evaluate.evaluate(segments)
+          labelling.toList
+        } else if (ALGORITHM=="naive") {
           val backgroundFacilities = computeBackgroundFacilities(user) // later: LOADbackgroundfacilities (and trained network)
           val finalLabelling = labelWithBackground(segments, backgroundFacilities)
-          val augmentedLabelling = augmentWithTruth(finalLabelling._1) //perhaps: put truth in already?
-          augmentedLabelling
+          finalLabelling._1
+        } else {
+          Truth.labelWithTruth(segments, theTruth.contents)
         }
 
         // not using labelled facilities from labelling, but inferring facilities freshly from only today
         val finalFacilities = Labeller.deriveFacilities(labelling.filter(s => s.isActivity))
         val withNearestFacility = snapActivitiesToNearestFacility(labelling, finalFacilities).toList
 
-        val planElements = toPlanElements(withNearestFacility)
+        val planElements = PlanMaker.toPlanElements(withNearestFacility)
 
 
         actsAndLegs = planElements
         facilities = finalFacilities
+
+
 
 
         assert(actsAndLegs.map(planElement => planElement.segments).flatten.map(segment => segment.locations).flatten.size == locations.size)
@@ -193,7 +118,20 @@ class ShowPlan extends Logger {
               case Other(other) => renderSegments(other, distanceToNext)
               case _ => Nil
             })
-        }
+        } &
+        "#plan *" #> (
+          "tr *" #> {
+            actsAndLegs.map { planElement =>
+              "@from *" #> Text(theTimeFormat.print(new LocalDateTime(planElement.startTime))) &
+                "@to *" #> Text(theTimeFormat.print(new LocalDateTime(planElement.endTime))) &
+                "@tag *" #> Text(planElement match {
+                  case _:Activity => "act "
+                  case _:Leg => "leg"
+                  case _ => "other"
+                })
+            }
+          }
+          )
       }
       case _ => {
         "#plan *" #> Text("Not logged in.")
@@ -202,14 +140,6 @@ class ShowPlan extends Logger {
 
   }
 
-  def snapActivitiesToNearestFacility(segments: Seq[LabelledSegment], facilities: List[Facility]) = {
-    for (segment <- segments) yield {
-      if (segment.isActivity)
-        SegmentWithFacility(segment, Labeller.findNearFacility(segment.segment, facilities))
-      else
-        SegmentWithFacility(segment, None)
-    }
-  }
 
   def augmentWithTruth(finalLabelling: List[LabelledSegment]): List[LabelledSegment] = {
     val (truth, _) = theTruth.contents.currentValue
@@ -340,7 +270,7 @@ class ShowPlan extends Logger {
 
 
 
-  def makeLeg(leg: ShowPlan.this.type#Leg): JsObj = {
+  def makeLeg(leg: Leg): JsObj = {
     val distance = LatLong.calcDistance(leg.activity1.head.segment.segment.locations.head.location, leg.activity2.last.segment.segment.locations.head.location)
     val duration = new Duration(new DateTime(leg.startTime), new DateTime(leg.endTime)).getStandardSeconds
     JsObj(("points", JsArray(List(leg.activity1.head.facility.get.location, leg.activity2.head.facility.get.location).map {
@@ -351,54 +281,6 @@ class ShowPlan extends Logger {
     + ((distance / duration) * 3.6 formatted "%.2f"+"km/h")))
   }
 
-
-
-
-  object LegActivityTail {
-    def unapply(xs: List[SegmentWithFacility]) = {
-      val (leg, rest) = xs.span(_.facility.isEmpty)
-      rest match {
-        case act :: tail if act.facility.isDefined  => Some(leg,act,tail)
-        case _ => None
-      }
-    }
-  }
-
-
-  def toPlanElements(segments: List[SegmentWithFacility]) = {
-    // group by switch of facility.
-    // danach hab ich aber gemerkt, dass ich leere listen dazwischen haben will, wenn die facility von gesetzt auf
-    // gesetzt wechselt .. total bloed.
-    def groupByFacility(segments: List[SegmentWithFacility]) : List[List[SegmentWithFacility]] = {
-      segments match {
-        case Nil => Nil
-        case firstSegment :: rest => {
-          val (onSamePlanElement, onOtherPlanElements) = (firstSegment :: rest).span(segment => segment.facility == firstSegment.facility)
-          onOtherPlanElements match {
-            case next :: _ if firstSegment.facility != None && next.facility != None => onSamePlanElement :: Nil :: groupByFacility(onOtherPlanElements)
-            case _ => onSamePlanElement :: groupByFacility(onOtherPlanElements)
-          }
-
-        }
-      }
-    }
-
-    val groupedSegments = groupByFacility(segments)
-    // hier die leeren listen wieder rausfischen. das muss besser gehn
-    mySliding(groupedSegments).map { window => window match {
-      case List(List(), List(dis), _) => (if (dis.head.facility == None) Other(dis) else Activity(dis)) : PlanElement
-      case List(List(prev), List(dis), List(next)) => (if (dis.isEmpty || dis.head.facility == None) Leg(prev, dis, next) else Activity(dis)): PlanElement
-      case List(List(prev), List(dis), List()) => (if (dis.head.facility == None) Other(dis) else Activity(dis)): PlanElement
-    }
-
-
-    }
-
-  }
-
-  def mySliding[T](lst: List[T]) = {
-    (0 until lst.length).map(i => List(lst.slice(i - 1,i), List(lst(i)), lst.slice(i + 1, i + 2) ))
-  }  // "This is a Zipper. Look at scalaz".
 
 
 

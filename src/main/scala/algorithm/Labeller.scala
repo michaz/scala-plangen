@@ -90,7 +90,6 @@ object Labeller {
 
   def label(segments: List[Segment], facilities: List[Facility]): (List[LabelledSegment], List[LabelledFacility]) = {
     val labelledSegments = segments.map { segment =>
-      val nearestFacility: Option[Labeller.Facility] = findNearFacility(segment, facilities)
       val isActivity = segment.minutes >= DURATION_OF_SIGNIFICANT_ACTIVITY || segment.containsCheckin
       LabelledSegment(segment, isActivity)
     }
@@ -110,6 +109,12 @@ object Labeller {
         if (distanceToThisSegment(nearestFacility) <= SNAP_TO_FACILITY) Some(nearestFacility) else None
       }
     }
+    nearestFacility
+  }
+
+  def findNearestFacility(segment: Labeller.Segment, facilities: scala.List[Labeller.Facility]): Labeller.Facility = {
+    def distanceToThisSegment(facility: Facility) = LatLong.calcDistance(facility.location, segment.locations.head.location)
+    val nearestFacility = facilities.reduceLeft((a, b) => if (distanceToThisSegment(a) <= distanceToThisSegment(b)) a else b)
     nearestFacility
   }
 
@@ -168,6 +173,16 @@ object Labeller {
       else if (isTruly("leg", segment)) segment.copy(isActivity = false)
       else segment
     }).toList
+  }
+
+
+  def snapActivitiesToNearestFacility(segments: Seq[LabelledSegment], facilities: List[Facility]) = {
+    for (segment <- segments) yield {
+      if (segment.isActivity)
+        SegmentWithFacility(segment, Some(Labeller.findNearestFacility(segment.segment, facilities)))
+      else
+        SegmentWithFacility(segment, None)
+    }
   }
 
 }

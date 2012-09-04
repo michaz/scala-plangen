@@ -8,6 +8,8 @@ import org.jgrapht.alg.KruskalMinimumSpanningTree;
 import org.jgrapht.graph.DefaultWeightedEdge;
 import org.jgrapht.graph.SimpleWeightedGraph;
 import org.jgrapht.graph.UndirectedSubgraph;
+
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -34,42 +36,33 @@ public class Clusterer {
     }
 
     public static <A extends ThingToCluster> List<Set<A>> findSignificantLocations(List<A> segments) {
+        return findSignificantLocations(segments, 400.0);
+    }
 
-
-        // Idiotische Art, in quadratischer Zeit den euklidischen MST zu berechnen.
-        // Das natürlich beizeiten durch O(nlogn)-Algorithmus ersetzen.
-        UndirectedGraph<A, DefaultWeightedEdge> g;
-        g = new SimpleWeightedGraph<A, DefaultWeightedEdge>(DefaultWeightedEdge.class);
-        for (A segment : segments) {
-            g.addVertex(segment);
-        }
-        for (int i=0; i < segments.size(); ++i) {
-            for (int j=i+1; j< segments.size(); ++j) {
-                A v1 = segments.get(i);
-                A v2 = segments.get(j);
-                Graphs.addEdge(g, v1, v2, calcDistance(v1.getLat(), v1.getLong(), v2.getLat(), v2.getLong()));
+    private static <A extends ThingToCluster> List<Set<A>> findSignificantLocations(List<A> segments, double length) {
+        List<Set<A>> clusters = new ArrayList<Set<A>>();
+        for (A segment: segments) {
+            boolean hasGoneInACluster = false;
+            for (Set<A> cluster: clusters) {
+                boolean canGoInCluster = true;
+                for (A otherSegmentInCluster: cluster) {
+                    if (calcDistance(segment.getLat(), segment.getLong(), otherSegmentInCluster.getLat(), otherSegmentInCluster.getLong()) > length) {
+                        canGoInCluster = false;
+                        break;
+                    }
+                }
+                if (canGoInCluster) {
+                    cluster.add(segment);
+                    hasGoneInACluster = true;
+                    break;
+                }
+            }
+            if (!hasGoneInACluster) {
+                Set<A> cluster = new HashSet<A>();
+                cluster.add(segment);
+                clusters.add(cluster);
             }
         }
-        KruskalMinimumSpanningTree<A, DefaultWeightedEdge> mst = new KruskalMinimumSpanningTree<A, DefaultWeightedEdge>(g);
-
-        Set<DefaultWeightedEdge> edges = mst.getEdgeSet();
-        System.out.println("Weights:");
-        for (DefaultWeightedEdge edge : edges) {
-            System.out.println(g.getEdgeWeight(edge));
-        }
-
-        Set<DefaultWeightedEdge> shortEdges = new HashSet<DefaultWeightedEdge>();
-        for (DefaultWeightedEdge edge : edges) {
-            if (g.getEdgeWeight(edge) < 200) {
-                shortEdges.add(edge);
-            }
-        }
-
-        UndirectedSubgraph<A, DefaultWeightedEdge> subgraph = new UndirectedSubgraph<A, DefaultWeightedEdge>(g, g.vertexSet(), shortEdges);
-        ConnectivityInspector<A, DefaultWeightedEdge> connectivityInspector = new ConnectivityInspector<A, DefaultWeightedEdge>(subgraph);
-        List<Set<A>> clusters = connectivityInspector.connectedSets();
-
-
         return clusters;
     }
 

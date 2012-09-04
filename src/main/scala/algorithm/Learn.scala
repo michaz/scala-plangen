@@ -41,7 +41,7 @@ object Learn {
         println(truth)
         val locations = Location.findByDay(day)
         val Segmentation(segments, distanceToNext) = segment(locations)
-        val labelling = labelWithTruth(segments, truth)
+        val labelling = Truth.labelWithTruth(segments, truth)
         Some(labelling)
       } else {
         None
@@ -57,16 +57,7 @@ object Learn {
     training.add(instance)
   }
 
-  def labelWithTruth(labelling: Seq[Segment], truth: Seq[TruthItem]): List[LabelledSegment] = {
-    (for (segment <- labelling) yield {
-      val inTrueActivity = truth.filter(_.tag == "act") exists {
-        t =>
-          new Interval(new DateTime(segment.startTime), new DateTime(segment.endTime))
-            .overlaps(new Interval(new DateTime(t.from), new DateTime(t.to)))
-      }
-      LabelledSegment(segment, inTrueActivity)
-    }).toList
-  }
+
 
   val tmpls = Seq(
     new ACRF.UnigramTemplate (0),    // Warum funktioniert das nicht, wenn nur das UnigramTemplate läuft?
@@ -78,15 +69,6 @@ object Learn {
   val trainer = new DefaultAcrfTrainer();
   val testing = training
   trainer.train (acrf, training, null, testing, 100);
-
-
-  var facilitiesFromEvaluation = Seq[Facility]()
-  val labellingsFromEvaluation = for (day <- days) yield {
-    val locations = Location.findByDay(day)
-    val Segmentation(segments, distanceToNext) = segment(locations)
-    Learn.evaluate(segments)
-  }
-  facilitiesFromEvaluation = deriveFacilities(labellings.flatten.toList.filter(_.isActivity))
 
 
 
@@ -110,7 +92,7 @@ object Learn {
 
   def computeFeatureVector(segment: Labeller.Segment, facilities: scala.Seq[Labeller.Facility]): FeatureVector = {
     var pl: PropertyList = null
-    pl = PropertyList.add("duration", segment.minutes, pl)
+    pl = PropertyList.add("duration", segment.minutes / Labeller.DURATION_OF_SIGNIFICANT_ACTIVITY, pl)
     pl = PropertyList.add("checkin", if (segment.containsCheckin) 1.0 else 0.0, pl)
     // pl = PropertyList.add("number-points", segment.segment.locations.size, pl)
     val facility = Labeller.findNearFacility(segment, facilities.toList)
@@ -121,15 +103,5 @@ object Learn {
     featureVector
   }
 
-  def evaluate(segments: Seq[Segment]) = {
-    val instance = constructInstance(segments.map(LabelledSegment(_, false)), facilitiesFromEvaluation)
-    val labelsInCrappyType = acrf.getBestLabels(instance)
-    val labels = (0 to labelsInCrappyType.size-1).map(labelsInCrappyType.getLabels(_))
-    for ((segment, label) <- segments zip labels) yield {
-      val actOrLeg = label.get(0).toString
-      println(actOrLeg)
-      LabelledSegment(segment, if(actOrLeg == "act") true else if(actOrLeg == "leg") false else throw new RuntimeException(actOrLeg) )
-    }
-  }
 
 }
