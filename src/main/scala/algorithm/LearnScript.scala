@@ -8,7 +8,7 @@ import data.mongo.{TruthRecord, Location}
 import algorithm.Labeller._
 import algorithm.Labeller.Segmentation
 import net.liftweb.util.StringHelpers
-import algorithm.PlanMaker.Activity
+import algorithm.PlanMaker.{Leg, Activity}
 
 /**
  * Created with IntelliJ IDEA.
@@ -53,9 +53,11 @@ object LearnScript extends App {
         val ruleBasedLabelling = Labeller.labelWithBackground(segments, backgroundFacilities)._1
         val truthBasedLabelling = Truth.labelWithTruth(segments, truth)
 
-        for ((name, labelling) <- Seq(("fromLearning", labellingFromLearning.toList), ("fromRules", ruleBasedLabelling), ("fromTruth", truthBasedLabelling))) {
-          val finalFacilities = Labeller.deriveFacilities(labelling.filter(s => s.isActivity))
-          val withNearestFacility = snapActivitiesToNearestFacility(labelling, finalFacilities).toList
+        for ((name, labelling, facilities) <- Seq[(String, List[LabelledSegment], List[Facility])] (
+          ("fromLearning", labellingFromLearning.toList, Evaluate.facilitiesFromEvaluation.toList),
+          ("fromRules", ruleBasedLabelling, Labeller.deriveFacilities(ruleBasedLabelling.filter(s => s.isActivity))),
+          ("fromTruth", truthBasedLabelling, Labeller.deriveFacilities(truthBasedLabelling.filter(s => s.isActivity))))) {
+          val withNearestFacility = snapActivitiesToNearestFacility(labelling, facilities).toList
           val planElements = PlanMaker.toPlanElements(withNearestFacility)
           val myFacilityLetters = facilityLetters()
           val activityChainString = planElements.flatMap {
@@ -67,6 +69,11 @@ object LearnScript extends App {
 
           println(day + " " + name)
           println(activityChainString)
+          planElements.foreach {
+            case a: Activity => println("Act " + a.startTime + " " + a.endTime)
+            case l: Leg => println("Leg " + l.startTime + " " + l.endTime)
+            case _ => ()
+          }
         }
 
       }

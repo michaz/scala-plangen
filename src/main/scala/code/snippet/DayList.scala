@@ -5,6 +5,7 @@ import Helpers._
 import net.liftweb.common.Logger
 import data.mongo.Location
 import java.text.SimpleDateFormat
+import algorithm.Truth
 
 /**
  * A snippet transforms input to output... it transforms
@@ -22,10 +23,13 @@ object DayList extends Logger {
 
   def render = "li *" #> {
     Location.findDays.map(date => {
+      val truth = new Truth(date.toDate)
+      truth.load
       val dateString = theDateFormat.format(date.toDate)
       "#maplink" #> ("a [href]" #> (dateString + "/map") & "a *" #> dateString) &
       "#listlink" #> ("a [href]" #> (dateString + "/")) &
-      "#planlink" #> ("a [href]" #> (dateString + "/plan"))
+      "#planlink" #> ("a [href]" #> (dateString + "/plan")) &
+      "#hastruth *" #> (if (truth.contents.isEmpty) "" else "truth")
     })
 
   }

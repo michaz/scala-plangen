@@ -107,6 +107,15 @@ class ShowPlan extends Logger {
         }
 
         println(algorithm)
+        val myFacilityLetters = LearnScript.facilityLetters()
+        val activityChainString = actsAndLegs.flatMap {
+          case Activity(segments) => {
+            Some(myFacilityLetters(segments.head.facility.get))
+          }
+          case _ => None
+        }
+
+        println(activityChainString)
 
         assert(actsAndLegs.map(planElement => planElement.segments).flatten.map(segment => segment.locations).flatten.size == locations.size)
         "#selection_dropdown *" #> (
