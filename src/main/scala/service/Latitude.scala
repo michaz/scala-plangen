@@ -20,18 +20,22 @@ object Latitude extends Logger {
   def getLatitude(mintime: Long) = {
     val credentials = LatitudeResource.is.openTheBox
     val latitude = com.google.api.services.latitude.Latitude.builder(new NetHttpTransport(), new JacksonFactory()).setHttpRequestInitializer(credentials).build();
-    val maybeLocations = Option(latitude.location
-      .list
-      .setMinTime(mintime.toString)
-      .setMaxTime((mintime + 24 * 60 * 60 * 1000).toString)
-      .setGranularity("best")
-      .setMaxResults("1000")
-      .execute()
-      .getItems)
-    val result: Seq[Location] = maybeLocations match {
-      case None => Nil
-      case Some(locations) => List(locations:_*)
-    }
+
+    val result = (for ((loopmintime, loopmaxtime) <- Seq((mintime, mintime + 12 * 60 * 60 * 1000 - 1), (mintime + 12 * 60 * 60 * 1000, mintime + 24 * 60 * 60 * 1000 - 1))) yield {
+      val maybeLocations = Option(latitude.location
+        .list
+        .setMinTime(loopmintime.toString)
+        .setMaxTime(loopmaxtime.toString)
+        .setGranularity("best")
+        .setMaxResults("10000")
+        .execute()
+        .getItems)
+      val loopresult: Seq[Location] = maybeLocations match {
+        case None => Nil
+        case Some(locations) => List(locations: _*)
+      }
+      loopresult
+    }).flatten
     info("Got " + result.size.toString + " points from Latitude.")
     result
   }

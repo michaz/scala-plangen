@@ -27,7 +27,7 @@ object Labeller {
 
   case class SegmentWithFacility(segment: LabelledSegment, facility: Option[Facility])
 
-  case class LabelledSegment(segment: Segment, isActivity: Boolean) extends ThingToCluster {
+  case class LabelledSegment(segment: Segment, isActivity: Boolean, isFirstInActivity: Boolean) extends ThingToCluster {
     def getLat = segment.locations.head.location.lat
     def getLong = segment.locations.head.location.long
   }
@@ -91,7 +91,7 @@ object Labeller {
   def label(segments: List[Segment], facilities: List[Facility]): (List[LabelledSegment], List[LabelledFacility]) = {
     val labelledSegments = segments.map { segment =>
       val isActivity = segment.minutes >= DURATION_OF_SIGNIFICANT_ACTIVITY || segment.containsCheckin
-      LabelledSegment(segment, isActivity)
+      LabelledSegment(segment, isActivity, true)
     }
     val labelledFacilities = facilities.map { facility =>
       LabelledFacility(facility)
@@ -177,11 +177,17 @@ object Labeller {
 
 
   def snapActivitiesToNearestFacility(segments: Seq[LabelledSegment], facilities: List[Facility]) = {
+    var currentFacility: Facility = null
     for (segment <- segments) yield {
-      if (segment.isActivity)
-        SegmentWithFacility(segment, Some(Labeller.findNearestFacility(segment.segment, facilities)))
-      else
+      if (segment.isActivity) {
+        if (segment.isFirstInActivity || currentFacility == null) {
+          currentFacility = Labeller.findNearestFacility(segment.segment, facilities)
+        }
+        SegmentWithFacility(segment, Some(currentFacility))
+      } else {
+        currentFacility = null
         SegmentWithFacility(segment, None)
+      }
     }
   }
 

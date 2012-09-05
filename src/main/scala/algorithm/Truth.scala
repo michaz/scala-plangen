@@ -79,13 +79,24 @@ class Truth(date: Date) {
 object Truth {
 
   def labelWithTruth(labelling: Seq[Segment], truth: Seq[TruthItem]): List[LabelledSegment] = {
+    var burnedActivityTruths = Set[TruthItem]()
     (for (segment <- labelling) yield {
-      val inTrueActivity = truth.filter(_.tag == "act") exists {
+      val activityTruth = truth.filter(_.tag == "act").find {
         t =>
           new Interval(new DateTime(segment.startTime), new DateTime(segment.endTime))
             .overlaps(new Interval(new DateTime(t.from), new DateTime(t.to)))
       }
-      LabelledSegment(segment, inTrueActivity)
+      activityTruth match {
+        case None => LabelledSegment(segment, false, false)
+        case Some(activityTruth) => {
+          if(burnedActivityTruths(activityTruth)) {
+            LabelledSegment(segment, true, false)
+          } else {
+            burnedActivityTruths = burnedActivityTruths + activityTruth
+            LabelledSegment(segment, true, true)
+          }
+        }
+      }
     }).toList
   }
 

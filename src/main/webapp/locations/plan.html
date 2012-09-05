@@ -14,12 +14,29 @@
             <script src="/js/drawchart.js" type="text/javascript"></script>
 
 
+            <div id="selection_dropdown"></div>
+
             <div class="lift:ShowPlan.renderGoogleMap"></div>
             <div id="map_canvas" style="width: 1024px; height: 768px"></div>
 
             <div id="chart_div" style="width: 900px; height: 500px;"></div>
 
-            <div>
+            <fieldset>
+                <legend>Plan</legend>
+                <table id="plan">
+                    <tbody id="contents_tbody_plan">
+                    <tr>
+                        <td name="from" style="width: 100px;">fromtime</td>
+                        <td name="to" style="width: 100px;">totime</td>
+                        <td name="tag" style="width: 100px;">tag</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </fieldset>
+
+
+            <fieldset>
+                <legend>Truth</legend>
             <table class="lift:ShowPlan.renderTruth" id="truth">
                 <tbody id="contents_tbody">
                 <tr>
@@ -31,23 +48,6 @@
                 </tr>
                 </tbody>
             </table>
-            </div>
-
-            <div>
-                <table id="plan">
-                    <tbody id="contents_tbody_plan">
-                    <tr>
-                        <td name="from" style="width: 100px;">fromtime</td>
-                        <td name="to" style="width: 100px;">totime</td>
-                        <td name="tag" style="width: 100px;">tag</td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-
-
-
-
             <span class="lift:ShowPlan.renderTruthButton">
             <form class="lift:form.ajax">
                 <table id="truth-form">
@@ -62,9 +62,14 @@
                 </table>
             </form>
             <div>
-            <button name="fill">Fill</button>
+                <button name="fill">Fill</button>
             </div>
             </span>
+            </fieldset>
+
+
+
+
 
             This is the plan for <span id="day">from-date</span>:
             <ul id="planList">

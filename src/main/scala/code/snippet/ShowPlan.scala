@@ -8,7 +8,7 @@ import xml.NodeSeq
 import net.liftweb.http._
 import data.mongo.{LatLong, Location}
 import org.joda.time._
-import net.liftweb.http.js.{JsExp, JsCmd, JsObj}
+import js.{JsCmds, JsExp, JsCmd, JsObj}
 import net.liftweb.http.js.JE.{JsRaw, JsArray, JsObj}
 import net.liftweb.http.js.JsCmds.{OnLoad, Script, JsCrVar}
 import java.util.{Locale, Date}
@@ -44,11 +44,7 @@ import algorithm.PlanMaker.{Other, Leg, Activity, PlanElement}
 
 class ShowPlan extends Logger {
 
-
-  // val ALGORITHM="truth"
-  val ALGORITHM="naive"
-
-  // val ALGORITHM="learning"
+  object algorithm extends SessionVar[String]("learning")
 
   private[this] val theDateFormat = new SimpleDateFormat("yyyy-MM-dd")
   private[this] val theTimeFormat = DateTimeFormat.mediumTime().withLocale(Locale.GERMANY)
@@ -71,7 +67,7 @@ class ShowPlan extends Logger {
         "#locationList *" #> segment.segment.segment.locations.map { location =>
           "#locationText *" #> Text(location.toString) &
           "#locationDist *" #> distanceToNext.get(location).getOrElse(0.0).toString
-        } & "#segmentText *" #> Text(segment.segment.segment.minutes + " Minuten langes Segment. Signifikant: " + segment.segment.isActivity)
+        } & "#segmentText *" #> Text(segment.segment.segment.minutes + " Minuten langes Segment. Signifikant: " + segment.segment.isActivity + " Erster: " + segment.segment.isFirstInActivity)
 
       }
     }
@@ -85,31 +81,40 @@ class ShowPlan extends Logger {
         val user = CurrentUser.is.openTheBox
 
         val Segmentation(segments, distanceToNext) = segment(locations)
-        val labelling = if (ALGORITHM=="learning") {
-          val labelling = Evaluate.evaluate(segments)
-          labelling.toList
-        } else if (ALGORITHM=="naive") {
+
+        if (algorithm.get=="learning") {
+          val labelling = Evaluate.evaluate(segments).toList
+          val withNearestFacility = snapActivitiesToNearestFacility(labelling, Evaluate.facilitiesFromEvaluation.toList).toList
+          val planElements = PlanMaker.toPlanElements(withNearestFacility)
+          actsAndLegs = planElements
+          facilities = Evaluate.facilitiesFromEvaluation
+        } else if (algorithm.get=="naive") {
           val backgroundFacilities = computeBackgroundFacilities(user) // later: LOADbackgroundfacilities (and trained network)
           val finalLabelling = labelWithBackground(segments, backgroundFacilities)
-          finalLabelling._1
+          val labelling = finalLabelling._1
+          val finalFacilities = Labeller.deriveFacilities(labelling.filter(s => s.isActivity))
+          val withNearestFacility = snapActivitiesToNearestFacility(labelling, finalFacilities).toList
+          val planElements = PlanMaker.toPlanElements(withNearestFacility)
+          actsAndLegs = planElements
+          facilities = finalFacilities
         } else {
-          Truth.labelWithTruth(segments, theTruth.contents)
+          val labelling = Truth.labelWithTruth(segments, theTruth.contents)
+          val finalFacilities = Labeller.deriveFacilities(labelling.filter(s => s.isActivity))
+          val withNearestFacility = snapActivitiesToNearestFacility(labelling, finalFacilities).toList
+          val planElements = PlanMaker.toPlanElements(withNearestFacility)
+          actsAndLegs = planElements
+          facilities = finalFacilities
         }
 
-        // not using labelled facilities from labelling, but inferring facilities freshly from only today
-        val finalFacilities = Labeller.deriveFacilities(labelling.filter(s => s.isActivity))
-        val withNearestFacility = snapActivitiesToNearestFacility(labelling, finalFacilities).toList
-
-        val planElements = PlanMaker.toPlanElements(withNearestFacility)
-
-
-        actsAndLegs = planElements
-        facilities = finalFacilities
-
-
-
+        println(algorithm)
 
         assert(actsAndLegs.map(planElement => planElement.segments).flatten.map(segment => segment.locations).flatten.size == locations.size)
+        "#selection_dropdown *" #> (
+          SHtml.ajaxSelect(Seq(("learning","learning"),("naive","naive"),("truth","truth")), Full(algorithm.is), { str =>
+            algorithm(str)
+            JsCmds.RedirectTo("plan")
+          })
+          ) &
         "#planList *" #> actsAndLegs.map { planElement =>
           "#planElementText *" #> planElement.toString &
             "#segmentList *" #> (planElement match {
@@ -201,6 +206,7 @@ class ShowPlan extends Logger {
   }
 
   def renderTruth = {
+    println("rendering: " + theTruth.contents)
     "tbody" #> (
 
       util.Helpers.findOrCreateId(id =>  // make sure tbody has an id

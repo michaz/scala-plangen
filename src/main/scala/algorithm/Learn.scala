@@ -70,14 +70,20 @@ object Learn {
   val testing = training
   trainer.train (acrf, training, null, testing, 100);
 
-
-
-
   def constructInstance(truthItems: Seq[LabelledSegment], facilities: Seq[Facility]) = {
     var featureVectors = Vector[FeatureVector]()
     var labellings = Vector[Labels]()
     for (segment <- truthItems) {
-        val label = labelDict.lookupLabel(if(segment.isActivity) "act" else "leg")
+        val label = labelDict.lookupLabel(
+          if(segment.isActivity) {
+            if (segment.isFirstInActivity) {
+              "actStart"
+            } else {
+              "act"
+            }
+          } else {
+            "leg"
+          })
         val labelling = new Labels(Vector(label).toArray)
         labellings = labellings :+ labelling
         val featureVector: FeatureVector = computeFeatureVector(segment.segment, facilities)

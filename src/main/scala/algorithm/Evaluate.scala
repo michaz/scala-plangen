@@ -30,12 +30,12 @@ object Evaluate {
   }
 
   def evaluate(segments: Seq[Segment]) = {
-    val instance = Learn.constructInstance(segments.map(LabelledSegment(_, false)), facilitiesFromEvaluation)
+    val instance = Learn.constructInstance(segments.map(LabelledSegment(_, false, false)), facilitiesFromEvaluation)
     val labelsInCrappyType = Learn.acrf.getBestLabels(instance)
     val labels = (0 to labelsInCrappyType.size-1).map(labelsInCrappyType.getLabels(_))
     for ((segment, label) <- segments zip labels) yield {
       val actOrLeg = label.get(0).toString
-      LabelledSegment(segment, if(actOrLeg == "act") true else if(actOrLeg == "leg") false else throw new RuntimeException(actOrLeg) )
+      LabelledSegment(segment, if(actOrLeg == "act" || actOrLeg == "actStart") true else if(actOrLeg == "leg") false else throw new RuntimeException(actOrLeg), actOrLeg == "actStart" )
     }
   }
 
